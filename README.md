@@ -16,6 +16,18 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
+   If your phone cannot reach the development server over LAN, use a tunnel:
+
+   ```bash
+   npx expo start --tunnel --clear
+   ```
+
+   Stop the existing server with `Ctrl+C` before restarting. Use Expo Go compatible
+   with SDK 57. After changing native dependencies, restart Metro with `--clear`;
+   development builds also need to be rebuilt. Keep native package versions aligned
+   with the SDK using `npx expo install --check` and `npx expo install <package>`.
+   A working tunnel does not prevent errors caused by incompatible native modules.
+
 In the output, you'll find options to open the app in a
 
 - [development build](https://docs.expo.dev/develop/development-builds/introduction/)
