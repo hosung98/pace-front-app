@@ -1,18 +1,18 @@
 import { Tabs } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PaceIcon } from '@/components/pace-icon';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 
 const tabItems = [
-  { route: 'runs', label: '기록', icon: { ios: 'figure.run', android: 'directions_run', web: 'directions_run' } },
-  { route: 'stats', label: '통계', icon: { ios: 'chart.bar.fill', android: 'bar_chart', web: 'bar_chart' } },
-  { route: 'main', label: '홈', icon: { ios: 'house.fill', android: 'home', web: 'home' } },
-  { route: 'social', label: '소셜', icon: { ios: 'person.2.fill', android: 'group', web: 'group' } },
-  { route: 'profile', label: '마이', icon: { ios: 'person.fill', android: 'person', web: 'person' } },
+  { route: 'runs', label: '기록', icon: 'run' },
+  { route: 'stats', label: '통계', icon: 'stats' },
+  { route: 'main', label: '홈', icon: 'home' },
+  { route: 'social', label: '소셜', icon: 'social' },
+  { route: 'profile', label: '마이', icon: 'profile' },
 ] as const;
 
 export default function TabsLayout() {
@@ -59,11 +59,10 @@ export default function TabsLayout() {
                   styles.tab,
                   pressed && styles.pressed,
                 ]}>
-                <SymbolView
+                <PaceIcon
                   name={icon}
                   size={21}
-                  tintColor={isActive ? C.accent : C.subtle}
-                  weight="medium"
+                  color={isActive ? C.accent : C.subtle}
                 />
                 <Text style={[styles.label, isActive && styles.activeLabel]}>
                   {label}

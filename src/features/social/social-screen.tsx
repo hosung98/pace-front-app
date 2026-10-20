@@ -6,8 +6,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SymbolView } from 'expo-symbols';
 
+import { PaceIcon } from '@/components/pace-icon';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { TabScreenShell, tabScreenStyles } from '@/features/navigation/tab-screen-shell';
@@ -125,15 +125,10 @@ export function SocialScreen() {
                   accessibilityLabel="댓글은 서버 연동 후 사용할 수 있어요"
                   disabled
                   style={[styles.iconButton, styles.disabledAction]}>
-                  <SymbolView
-                    name={{
-                      ios: 'bubble.left',
-                      android: 'chat_bubble_outline',
-                      web: 'chat_bubble_outline',
-                    }}
+                  <PaceIcon
+                    name="comment"
                     size={20}
-                    tintColor={C.text}
-                    weight="regular"
+                    color={C.text}
                   />
                 </Pressable>
                 <Pressable
@@ -141,15 +136,10 @@ export function SocialScreen() {
                   accessibilityLabel="공유 기능은 서버 연동 후 사용할 수 있어요"
                   disabled
                   style={[styles.iconButton, styles.disabledAction]}>
-                  <SymbolView
-                    name={{
-                      ios: 'paperplane',
-                      android: 'send',
-                      web: 'send',
-                    }}
+                  <PaceIcon
+                    name="send"
                     size={19}
-                    tintColor={C.text}
-                    weight="regular"
+                    color={C.text}
                   />
                 </Pressable>
               </View>
