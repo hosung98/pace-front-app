@@ -15,7 +15,10 @@ FROM nginx:alpine
 # 빌드 결과물 복사
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# ★ 추가된 부분: Nginx 라우팅 설정 복사
+# ★ 추가: Nginx가 파일을 읽을 수 있도록 권한 부여
+RUN chmod -R 755 /usr/share/nginx/html
+
+# Nginx 라우팅 설정 복사
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
