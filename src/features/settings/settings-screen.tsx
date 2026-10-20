@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -50,19 +50,27 @@ export function SettingsScreen() {
 
         <Text style={styles.sectionTitle}>러닝</Text>
         <View style={styles.card}>
-          <Text style={styles.settingTitle}>거리 단위</Text>
-          <Text style={styles.settingDetail}>기록과 통계에 표시할 단위</Text>
+          <View style={styles.unitHeading}>
+            <Text style={styles.settingTitle}>거리 단위</Text>
+            <Text style={styles.settingDetail}>기록과 통계에 표시할 단위</Text>
+          </View>
           <View style={styles.unitSelector}>
             {(['km', 'mi'] as const).map((unit) => (
               <Pressable
                 key={unit}
-                accessibilityRole="button"
+                accessibilityRole="radio"
                 accessibilityState={{ selected: distanceUnit === unit }}
                 onPress={() => setDistanceUnit(unit)}
                 style={[styles.unitButton, distanceUnit === unit && styles.unitButtonActive]}>
-                <Text style={[styles.unitText, distanceUnit === unit && styles.unitTextActive]}>
-                  {unit === 'km' ? '킬로미터 (km)' : '마일 (mi)'}
-                </Text>
+                <View style={styles.radioIndicator}>
+                  {distanceUnit === unit ? <View style={styles.radioSelected} /> : null}
+                </View>
+                <View style={styles.unitCopy}>
+                  <Text style={[styles.unitText, distanceUnit === unit && styles.unitTextActive]}>
+                    {unit === 'km' ? '킬로미터' : '마일'}
+                  </Text>
+                  <Text style={styles.unitCode}>{unit}</Text>
+                </View>
               </Pressable>
             ))}
           </View>
@@ -112,13 +120,14 @@ function SettingSwitch({
         <Text style={styles.settingTitle}>{title}</Text>
         <Text style={styles.settingDetail}>{detail}</Text>
       </View>
-      <Switch
+      <Pressable
+        accessibilityRole="switch"
         accessibilityLabel={title}
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ false: C.raised, true: '#718A35' }}
-        thumbColor={value ? C.accent : '#D0D2CC'}
-      />
+        accessibilityState={{ checked: value }}
+        onPress={() => onValueChange(!value)}
+        style={[styles.switchTrack, value && styles.switchTrackActive]}>
+        <View style={[styles.switchThumb, value && styles.switchThumbActive]} />
+      </Pressable>
     </View>
   );
 }
@@ -136,16 +145,25 @@ const styles = StyleSheet.create({
   description: { marginTop: 5, color: C.muted, fontSize: 12 },
   sectionTitle: { marginTop: 24, marginBottom: 10, color: C.text, fontSize: 14, fontWeight: '700' },
   card: { paddingHorizontal: 15, borderRadius: 18, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
-  settingRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  settingRow: { minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
   settingCopy: { flex: 1, gap: 5 },
   settingTitle: { color: C.text, fontSize: 11, fontWeight: '600' },
   settingDetail: { color: C.subtle, fontSize: 9, lineHeight: 14 },
+  switchTrack: { width: 46, height: 28, padding: 3, flexShrink: 0, justifyContent: 'center', borderRadius: 14, backgroundColor: C.raised },
+  switchTrackActive: { backgroundColor: '#718A35' },
+  switchThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#D0D2CC', transform: [{ translateX: 0 }] },
+  switchThumbActive: { backgroundColor: C.accent, transform: [{ translateX: 18 }] },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: C.border },
-  unitSelector: { marginTop: 13, marginBottom: 14, gap: 8 },
-  unitButton: { minHeight: 39, paddingHorizontal: 12, justifyContent: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 11 },
+  unitHeading: { paddingTop: 15, gap: 5 },
+  unitSelector: { marginTop: 12, marginBottom: 15, gap: 8 },
+  unitButton: { minHeight: 48, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 11, borderWidth: 1, borderColor: C.border, borderRadius: 12 },
   unitButtonActive: { borderColor: '#718A35', backgroundColor: '#20251B' },
-  unitText: { color: C.muted, fontSize: 10 },
+  radioIndicator: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: C.subtle, borderRadius: 9 },
+  radioSelected: { width: 9, height: 9, borderRadius: 5, backgroundColor: C.accent },
+  unitCopy: { flex: 1, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  unitText: { color: C.muted, fontSize: 11 },
   unitTextActive: { color: C.accent, fontWeight: '600' },
+  unitCode: { color: C.subtle, fontSize: 10, textTransform: 'uppercase' },
   actionRow: { minHeight: 66, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   actionCopy: { gap: 5 },
   chevron: { color: C.subtle, fontSize: 22 },

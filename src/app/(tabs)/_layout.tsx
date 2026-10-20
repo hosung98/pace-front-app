@@ -1,4 +1,5 @@
 import { Tabs } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,9 +8,9 @@ import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 
 const tabItems = [
-  { route: 'main', label: '홈', icon: { ios: 'house.fill', android: 'home', web: 'home' } },
   { route: 'runs', label: '기록', icon: { ios: 'figure.run', android: 'directions_run', web: 'directions_run' } },
   { route: 'stats', label: '통계', icon: { ios: 'chart.bar.fill', android: 'bar_chart', web: 'bar_chart' } },
+  { route: 'main', label: '홈', icon: { ios: 'house.fill', android: 'home', web: 'home' } },
   { route: 'social', label: '소셜', icon: { ios: 'person.2.fill', android: 'group', web: 'group' } },
   { route: 'profile', label: '마이', icon: { ios: 'person.fill', android: 'person', web: 'person' } },
 ] as const;
@@ -38,6 +39,12 @@ export default function TabsLayout() {
                 accessibilityLabel={label}
                 accessibilityState={{ selected: isActive }}
                 onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
+                    (error: unknown) => {
+                      console.error('Unable to play tab haptic feedback.', error);
+                    },
+                  );
+
                   const event = navigation.emit({
                     type: 'tabPress',
                     target: state.routes[index]?.key,
@@ -66,9 +73,9 @@ export default function TabsLayout() {
           })}
         </View>
       )}>
-      <Tabs.Screen name="main" />
       <Tabs.Screen name="runs" />
       <Tabs.Screen name="stats" />
+      <Tabs.Screen name="main" />
       <Tabs.Screen name="social" />
       <Tabs.Screen name="profile" />
     </Tabs>

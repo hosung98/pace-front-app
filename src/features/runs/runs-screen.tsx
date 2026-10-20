@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
+import { PaceErrorDialog, PaceLoadingState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { TabScreenShell, tabScreenStyles } from '@/features/navigation/tab-screen-shell';
@@ -29,19 +30,39 @@ function formatRunDate(timestamp: number): string {
 export function RunsScreen() {
   const router = useRouter();
   const [completedRuns, setCompletedRuns] = useState<CompletedRun[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
+      setIsLoading(true);
+      setErrorMessage(null);
+      const skeletonTimer = setTimeout(() => {
+        if (isActive) setShowSkeleton(true);
+      }, 200);
+
       readCompletedRuns()
         .then((items) => {
           if (isActive) setCompletedRuns(items);
         })
         .catch((error: unknown) => {
           console.error('Unable to load completed runs.', error);
+          if (isActive) {
+            setErrorMessage('러닝 기록을 불러오지 못했어요. 잠시 후 다시 확인해 주세요.');
+          }
+        })
+        .finally(() => {
+          if (isActive) {
+            clearTimeout(skeletonTimer);
+            setIsLoading(false);
+            setShowSkeleton(false);
+          }
         });
       return () => {
         isActive = false;
+        clearTimeout(skeletonTimer);
       };
     }, []),
   );
@@ -62,7 +83,10 @@ export function RunsScreen() {
         </View>
       </View>
       <Text style={styles.sectionTitle}>최근 기록</Text>
-      {[...completedRuns.map((run) => ({
+      {isLoading && showSkeleton ? (
+        <PaceLoadingState label="러닝 기록을 불러오는 중" />
+      ) : (
+        [...completedRuns.map((run) => ({
         id: run.id,
         date: formatRunDate(run.startedAt),
         distance: (run.distanceMeters / 1000).toFixed(2),
@@ -106,12 +130,20 @@ export function RunsScreen() {
             <Metric label="평균 페이스" value={run.pace} unit="/km" />
           </View>
         </Pressable>
-      ))}
+      )))}
+      <PaceErrorDialog
+        message={errorMessage}
+        onClose={() => setErrorMessage(null)}
+      />
     </TabScreenShell>
   );
 }
 
-function Metric({ label, value, unit }: { label: string; value: string; unit?: string }) {
+function Metric({
+  label,
+  value,
+  unit,
+}: Readonly<{ label: string; value: string; unit?: string }>) {
   return (
     <View style={styles.metric}>
       <Text style={styles.metricLabel}>{label}</Text>

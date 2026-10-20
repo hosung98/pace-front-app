@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PaceBrand } from '@/components/pace-brand';
+import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 
@@ -43,6 +44,7 @@ export function RunTrackingScreen() {
   const [busy, setBusy] = useState(false);
   const [confirmingFinish, setConfirmingFinish] = useState(false);
   const [message, setMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     refreshActiveRunSnapshot().catch((error: unknown) => {
@@ -139,7 +141,7 @@ export function RunTrackingScreen() {
     } catch (error) {
       console.error('Unable to start GPS run tracking.', error);
       await clearActiveRun();
-      setMessage(getLocationFailureMessage(
+      setErrorMessage(getLocationFailureMessage(
         error,
         'GPS 러닝을 시작하지 못했어요. 권한과 위치 설정을 확인해 주세요.',
       ));
@@ -162,7 +164,7 @@ export function RunTrackingScreen() {
       await writeActiveRun(pausedRun);
     } catch (error) {
       console.error('Unable to pause GPS run tracking.', error);
-      setMessage('러닝을 일시 정지하지 못했어요. 다시 시도해 주세요.');
+      setErrorMessage('러닝을 일시 정지하지 못했어요. 다시 시도해 주세요.');
     } finally {
       setBusy(false);
     }
@@ -197,7 +199,7 @@ export function RunTrackingScreen() {
     } catch (error) {
       console.error('Unable to resume GPS run tracking.', error);
       await writeActiveRun({ ...run, status: 'paused' });
-      setMessage(getLocationFailureMessage(
+      setErrorMessage(getLocationFailureMessage(
         error,
         '러닝을 다시 시작하지 못했어요. 권한과 위치 설정을 확인해 주세요.',
       ));
@@ -237,7 +239,7 @@ export function RunTrackingScreen() {
       setMessage('러닝을 이 기기에 저장했어요. 서버 동기화는 아직 연결되지 않았어요.');
     } catch (error) {
       console.error('Unable to finish and save GPS run.', error);
-      setMessage('러닝을 저장하지 못했어요. 기록을 유지한 채 다시 시도해 주세요.');
+      setErrorMessage('러닝을 저장하지 못했어요. 기록을 유지한 채 다시 시도해 주세요.');
     } finally {
       setBusy(false);
     }
@@ -356,6 +358,10 @@ export function RunTrackingScreen() {
           위치 권한을 허용해야 합니다. 앱을 강제 종료하면 운영체제에 따라 기록이 중단될 수 있어요.
         </Text>
       </ScrollView>
+      <PaceErrorDialog
+        message={errorMessage}
+        onClose={() => setErrorMessage(null)}
+      />
     </SafeAreaView>
   );
 }
