@@ -2,7 +2,7 @@ import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { PaceColors } from '@/constants/pace';
 
@@ -17,17 +17,13 @@ const theme = {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    ...(Platform.OS === 'web'
-      ? {}
-      : {
-          'Pretendard-Regular': require('@/assets/fonts/Pretendard-Regular.otf'),
-          'Pretendard-SemiBold': require('@/assets/fonts/Pretendard-SemiBold.otf'),
-          'Pretendard-Bold': require('@/assets/fonts/Pretendard-Bold.otf'),
-        }),
+    'Pretendard-Regular': require('@/assets/fonts/Pretendard-Regular.otf'),
+    'Pretendard-SemiBold': require('@/assets/fonts/Pretendard-SemiBold.otf'),
+    'Pretendard-Bold': require('@/assets/fonts/Pretendard-Bold.otf'),
   });
 
   if (fontError) throw fontError;
-  if (!fontsLoaded && Platform.OS !== 'web') return null;
+  if (!fontsLoaded) return null;
 
   return (
     <ThemeProvider value={theme}>

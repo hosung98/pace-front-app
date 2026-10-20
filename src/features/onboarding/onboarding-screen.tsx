@@ -49,8 +49,8 @@ export function OnboardingScreen() {
   const visualSpacing = compact ? 42 : 59;
   const availableArtHeight = contentHeight - 24 - visualSpacing - copyHeight;
   const artHeight = Math.max(72, availableArtHeight);
-  const mobileArtWidth = Math.min(400, artHeight * 360 / 390);
-  const artWidth = Math.min(width - 32, wide ? 440 : mobileArtWidth);
+  const mobileArtWidth = Math.min(370, artHeight * 360 / 390);
+  const artWidth = Math.min(width - 56, wide ? 410 : mobileArtWidth);
   const needsScroll = !wide && availableArtHeight < 72;
 
   useEffect(() => {
@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
   keywordIcon: { width: 17, height: 17, borderRadius: 9, backgroundColor: '#252E1B', alignItems: 'center', justifyContent: 'center' },
   check: { color: C.accent, fontSize: 10, fontWeight: '700' },
   keyword: { color: '#C8CCBF', fontSize: 11, flexShrink: 1 },
-  footer: { paddingHorizontal: 28, paddingBottom: Platform.OS === 'web' ? 4 : 20, paddingTop: 4 },
+  footer: { paddingHorizontal: 28, paddingBottom: 20, paddingTop: 4 },
   wideFooter: { width: 420, alignSelf: 'flex-end', marginRight: 10 },
   paginationRow: { alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   dots: { flexDirection: 'row', alignItems: 'center' },
@@ -216,6 +216,6 @@ const styles = StyleSheet.create({
   nextArrow: { color: C.accentInk, fontSize: 22, lineHeight: 24 },
   replayButton: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   replayText: { color: C.text },
-  footerNote: { color: C.subtle, fontSize: 8, letterSpacing: 1.8, textAlign: 'center', marginTop: Platform.OS === 'web' ? 10 : 17, marginBottom: Platform.OS === 'web' ? 0 : 7 },
+  footerNote: { color: C.subtle, fontSize: 8, letterSpacing: 1.8, textAlign: 'center', marginTop: 17, marginBottom: 7 },
   pressed: { opacity: 0.65 },
 });
