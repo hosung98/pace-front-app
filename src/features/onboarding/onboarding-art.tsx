@@ -142,9 +142,9 @@ function CommunityArt() {
         </View>
         <View style={styles.avatars}>
           {[
-            { initials: 'J', color: '#D6D5C4', rotation: '-10deg' },
-            { initials: 'H', color: C.accent, rotation: '5deg' },
-            { initials: 'S', color: '#B6BDD0', rotation: '-6deg' },
+            { initials: '규', color: '#D6D5C4', rotation: '-10deg' },
+            { initials: '호', color: C.accent, rotation: '5deg' },
+            { initials: '현', color: '#B6BDD0', rotation: '-6deg' },
           ].map(({ initials, color, rotation }) => (
             <View key={initials} style={[styles.avatar, { backgroundColor: color, transform: [{ rotate: rotation }] }]}>
               <Text allowFontScaling={false} style={styles.avatarInitial}>{initials}</Text>
