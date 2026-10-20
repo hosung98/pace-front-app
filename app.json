@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "pace-front-app",
+    "name": "PACE",
     "slug": "pace-front-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "pacefrontapp",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "ios": {
       "icon": "./assets/expo.icon"
     },
@@ -28,9 +28,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#0C0D0F",
+          "image": "./assets/images/pace-mark.png",
+          "imageWidth": 88
         }
       ],
       "expo-asset"

@@ -1,6 +1,37 @@
-# Welcome to your Expo app 👋
+# PACE
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+
+## Current scope
+
+PACE is a running journal with a dark, mobile-first interface. This first slice
+contains a branded launch splash and three Korean onboarding pages: recording a
+run, personal progress, and running together. All illustrated metrics and social
+content are examples, not connected features.
+
+- Next, centered page indicators, and horizontal swipes across the illustration
+  and text area navigate the onboarding. Swipe right to go back; there is no back
+  button. Skip goes to page three.
+- The final page stays open; replay returns to page one. There is no login, home,
+  permission request, tracking, or saved onboarding-completion state yet.
+- Each fresh app launch shows an animated logo, tagline, and orbit splash before
+  onboarding. Reduced motion replaces the animation with a short static splash.
+- On phones, illustration size adapts to the measured space left after the header,
+  copy, controls, and safe areas so onboarding fits without vertical scrolling.
+  Scrolling is only enabled when unusually large accessibility text or an extremely
+  short window cannot fit the text and a minimum illustration. Tablet and wide web
+  layouts use two columns. Safe areas and reduced motion are supported.
+  Navigation has 20 points of bottom padding in addition to the device safe area.
+- Routes live in `src/app`, onboarding UI in `src/features/onboarding`, shared
+  branding in `src/components/pace-brand.tsx`, and colors in `src/constants/pace.ts`.
+- Native splash configuration requires a new development/release build to preview
+  accurately; Expo Go does not reproduce the final native splash.
+- Korean UI uses bundled static Pretendard Regular, SemiBold, and Bold fonts,
+  loaded before the native splash is hidden. The italic PACE wordmark retains its
+  system lettering. Pretendard is free for commercial use under the SIL Open Font
+  License; the original notice is included in `assets/fonts/OFL.txt`.
+
+Validate changes with `npm run lint` and `npx tsc --noEmit`.
 
 ## Get started
 

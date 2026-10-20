@@ -1,18 +1,46 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
+import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { StyleSheet, View } from 'react-native';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { PaceColors } from '@/constants/pace';
 
-SplashScreen.preventAutoHideAsync();
+SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
+  console.error('Unable to keep the native splash screen visible.', error);
+});
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+const theme = {
+  ...DarkTheme,
+  colors: { ...DarkTheme.colors, background: PaceColors.background },
+};
+
+export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    'Pretendard-Regular': require('@/assets/fonts/Pretendard-Regular.otf'),
+    'Pretendard-SemiBold': require('@/assets/fonts/Pretendard-SemiBold.otf'),
+    'Pretendard-Bold': require('@/assets/fonts/Pretendard-Bold.otf'),
+  });
+
+  if (fontError) throw fontError;
+  if (!fontsLoaded) return null;
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
+    <ThemeProvider value={theme}>
+      <View
+        style={styles.root}
+        onLayout={() => {
+          SplashScreen.hideAsync().catch((error: unknown) => {
+            console.error('Unable to hide the native splash screen.', error);
+          });
+        }}>
+        <StatusBar style="light" />
+        <Stack screenOptions={{ headerShown: false, contentStyle: styles.root }} />
+      </View>
     </ThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: PaceColors.background },
+});
