@@ -1,18 +1,50 @@
+import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { TabScreenShell, tabScreenStyles } from '@/features/navigation/tab-screen-shell';
+import { formatDuration, readCompletedRuns, type CompletedRun } from '@/features/running/run-storage';
 
 const runs = [
-  { id: 'run_123', date: '10월 18일 · 토요일', distance: '5.24', duration: '32:29', pace: "6'12''", note: '한강 저녁 러닝' },
-  { id: 'run_122', date: '10월 15일 · 수요일', distance: '4.36', duration: '27:48', pace: "6'22''", note: '가볍게 리커버리' },
-  { id: 'run_121', date: '10월 13일 · 월요일', distance: '2.80', duration: '18:10', pace: "6'29''", note: '동네 한 바퀴' },
+  { id: 'sample-run-123', date: '10월 18일 · 토요일', distance: '5.24', duration: '32:29', pace: "6'12''", note: '한강 저녁 러닝' },
+  { id: 'sample-run-122', date: '10월 15일 · 수요일', distance: '4.36', duration: '27:48', pace: "6'22''", note: '가볍게 리커버리' },
+  { id: 'sample-run-121', date: '10월 13일 · 월요일', distance: '2.80', duration: '18:10', pace: "6'29''", note: '동네 한 바퀴' },
 ];
+
+function formatPace(secondsPerKm: number | null): string {
+  if (secondsPerKm === null) return '--:--';
+  return `${Math.floor(secondsPerKm / 60)}'${String(secondsPerKm % 60).padStart(2, '0')}''`;
+}
+
+function formatRunDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString('ko-KR', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  });
+}
 
 export function RunsScreen() {
   const router = useRouter();
+  const [completedRuns, setCompletedRuns] = useState<CompletedRun[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      readCompletedRuns()
+        .then((items) => {
+          if (isActive) setCompletedRuns(items);
+        })
+        .catch((error: unknown) => {
+          console.error('Unable to load completed runs.', error);
+        });
+      return () => {
+        isActive = false;
+      };
+    }, []),
+  );
 
   return (
     <TabScreenShell
@@ -30,11 +62,35 @@ export function RunsScreen() {
         </View>
       </View>
       <Text style={styles.sectionTitle}>최근 기록</Text>
-      {runs.map((run) => (
+      {[...completedRuns.map((run) => ({
+        id: run.id,
+        date: formatRunDate(run.startedAt),
+        distance: (run.distanceMeters / 1000).toFixed(2),
+        duration: formatDuration(run.durationSeconds),
+        pace: formatPace(run.averagePaceSecondsPerKm),
+        note: 'GPS 러닝 기록',
+        startedAt: String(run.startedAt),
+        durationSeconds: String(run.durationSeconds),
+      })), ...runs.map((run) => ({
+        ...run,
+        startedAt: '',
+        durationSeconds: '',
+      }))].map((run) => (
         <Pressable
           key={run.id}
           accessibilityRole="button"
-          onPress={() => router.push('/run-detail')}
+          onPress={() => router.push({
+            pathname: '/run-detail',
+            params: {
+              runId: run.id,
+              title: run.note,
+              startedAt: run.startedAt,
+              distance: run.distance,
+              duration: run.duration,
+              pace: run.pace,
+              durationSeconds: run.durationSeconds,
+            },
+          })}
           style={({ pressed }) => [tabScreenStyles.card, pressed && styles.pressed]}>
           <View style={styles.runHeader}>
             <View>

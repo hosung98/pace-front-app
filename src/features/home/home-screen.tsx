@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 import { PaceBrand, PaceMark } from '@/components/pace-brand';
 import { PaceText as Text } from '@/components/pace-text';
@@ -163,7 +163,7 @@ function RecentRunCard() {
 }
 
 export function HomeScreen() {
-  const [statusMessage, setStatusMessage] = useState('');
+  const router = useRouter();
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -189,17 +189,8 @@ export function HomeScreen() {
         showsVerticalScrollIndicator={false}>
         <View style={styles.container}>
           <TodayRunCard
-            onStartRun={() =>
-              setStatusMessage(
-                '실시간 러닝 기록은 위치 권한과 러닝 API 연동 후 사용할 수 있어요.',
-              )
-            }
+            onStartRun={() => router.push('/run-tracking')}
           />
-          {statusMessage ? (
-            <Text accessibilityLiveRegion="polite" style={styles.runMessage}>
-              {statusMessage}
-            </Text>
-          ) : null}
 
           <View style={styles.section}>
             <SectionHeading title="이번 주 러닝" detail="주간 목표" />

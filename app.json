@@ -41,6 +41,16 @@
           "microphonePermission": false
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "러닝 중 GPS로 거리와 속도를 기록하기 위해 위치를 사용합니다.",
+          "locationAlwaysAndWhenInUsePermission": "화면이 잠긴 상태에서도 러닝을 기록하기 위해 위치를 사용합니다. 러닝을 종료하면 수집을 중단합니다.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
       "expo-asset"
     ],
     "experiments": {

@@ -15,8 +15,11 @@ are not connected to a backend.
   button. Skip goes to page three.
 - The final onboarding page leads to a login prototype. Its provider buttons do
   not authenticate yet; use the preview link to open the sample dashboard.
-- The dashboard at `/main` shows static sample metrics. It does not request
-  location permission or record runs.
+- The dashboard at `/main` shows sample metrics. Starting a run opens native
+  GPS tracking with distance, elapsed time, speed, pause/resume, and on-device
+  save. Background location requires a development/standalone build and OS
+  permissions; browser/PWA and Expo Go cannot keep recording with the screen
+  locked.
 - The five bottom tabs use Expo Router's tab navigator: home, run history,
   statistics, social feed, and profile. Switching tabs does not add a back-stack
   entry. App settings and run details are pushed as sub-screens with a back
@@ -27,6 +30,9 @@ are not connected to a backend.
 - Social post composition can select up to four photos and requires an
   audience choice for each post. Selected images are preview-only until media
   upload and post APIs are connected.
+- GPS routes are stored locally on the device. Force-quitting the app or
+  operating-system battery restrictions can interrupt background recording;
+  cloud sync is not connected.
 - Backend API contracts and open integration decisions are documented in
   [docs/API_REQUIREMENTS.md](./docs/API_REQUIREMENTS.md).
 - Each fresh app launch shows an animated logo, tagline, and orbit splash before

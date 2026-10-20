@@ -1,5 +1,5 @@
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PaceBrand } from '@/components/pace-brand';
@@ -17,6 +17,28 @@ const splits = [
 
 export function RunDetailScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    runId?: string;
+    title?: string;
+    startedAt?: string;
+    distance?: string;
+    duration?: string;
+    pace?: string;
+    durationSeconds?: string;
+  }>();
+  const isRecordedRun = Boolean(params.startedAt);
+  const distance = params.distance ?? '5.24';
+  const duration = params.duration ?? '32:29';
+  const pace = params.pace ?? "6'12''";
+  const startedAt = params.startedAt
+    ? new Date(Number(params.startedAt)).toLocaleString('ko-KR', {
+        month: 'long',
+        day: 'numeric',
+        weekday: 'long',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : '10월 18일 토요일 · 오후 6:42';
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -29,39 +51,53 @@ export function RunDetailScreen() {
           <View style={styles.headerSpacer} />
         </View>
         <Text style={styles.eyebrow}>RUN DETAIL · SAMPLE</Text>
-        <Text style={styles.title}>한강 저녁 러닝</Text>
-        <Text style={styles.date}>10월 18일 토요일 · 오후 6:42</Text>
+        <Text style={styles.title}>{params.title ?? '한강 저녁 러닝'}</Text>
+        <Text style={styles.date}>{startedAt}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.mapPlaceholder}>
           <Text style={styles.mapIcon}>⌁</Text>
           <Text style={styles.mapTitle}>러닝 경로 미리보기</Text>
-          <Text style={styles.mapCaption}>실제 경로는 GPS 기록 연동 후 표시됩니다.</Text>
+          <Text style={styles.mapCaption}>
+            {isRecordedRun ? 'GPS 경로는 기기에 저장되어 있어요.' : '샘플 기록 미리보기입니다.'}
+          </Text>
         </View>
         <View style={styles.primaryMetric}>
-          <Text style={styles.distance}>5.24<Text style={styles.unit}> km</Text></Text>
+          <Text style={styles.distance}>{distance}<Text style={styles.unit}> km</Text></Text>
           <Text style={styles.metricLabel}>총 거리</Text>
         </View>
         <View style={styles.metricGrid}>
-          <Metric label="러닝 시간" value="32:29" />
-          <Metric label="평균 페이스" value={"6'12'' /km"} />
-          <Metric label="평균 속도" value="9.7 km/h" />
+          <Metric label="러닝 시간" value={duration} />
+          <Metric label="평균 페이스" value={`${pace} /km`} />
+          <Metric
+            label="평균 속도"
+            value={params.durationSeconds && Number(params.durationSeconds) > 0
+              ? `${((Number(distance) * 3600) / Number(params.durationSeconds)).toFixed(1)} km/h`
+              : '9.7 km/h'}
+          />
           <Metric label="소모 칼로리" value="342 kcal" />
         </View>
-        <Text style={styles.sectionTitle}>구간별 페이스</Text>
-        <View style={styles.splits}>
-          {splits.map((split, index) => (
-            <View key={`${split.km}-${index}`} style={styles.splitRow}>
-              <Text style={styles.splitKm}>{split.km}</Text>
-              <View style={styles.splitBarTrack}>
-                <View style={[styles.splitBar, { width: `${Math.max(32, 100 - index * 7)}%` }]} />
-              </View>
-              <Text style={styles.splitPace}>{split.pace}</Text>
+        {!isRecordedRun ? (
+          <>
+            <Text style={styles.sectionTitle}>구간별 페이스</Text>
+            <View style={styles.splits}>
+              {splits.map((split, index) => (
+                <View key={`${split.km}-${index}`} style={styles.splitRow}>
+                  <Text style={styles.splitKm}>{split.km}</Text>
+                  <View style={styles.splitBarTrack}>
+                    <View style={[styles.splitBar, { width: `${Math.max(32, 100 - index * 7)}%` }]} />
+                  </View>
+                  <Text style={styles.splitPace}>{split.pace}</Text>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
-        <Text style={styles.note}>이 화면은 샘플 기록입니다. 상세 API는 docs/API_REQUIREMENTS.md를 참고하세요.</Text>
+          </>
+        ) : (
+          <Text style={styles.note}>
+            GPS 경로는 이 기기에 저장되어 있습니다. 지도 및 구간별 기록은 추후 연결할 수 있어요.
+          </Text>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
