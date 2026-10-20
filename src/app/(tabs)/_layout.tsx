@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PaceIcon } from '@/components/pace-icon';
@@ -17,6 +17,9 @@ const tabItems = [
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const bottomInset = Platform.OS === 'web'
+    ? Math.min(insets.bottom, 34)
+    : insets.bottom;
 
   return (
     <Tabs
@@ -26,7 +29,7 @@ export default function TabsLayout() {
         <View
           style={[
             styles.tabBar,
-            { paddingBottom: Math.max(insets.bottom, 8) },
+            { paddingBottom: Math.max(bottomInset, 8) },
           ]}>
           {tabItems.map(({ route, label, icon }) => {
             const index = state.routes.findIndex((item) => item.name === route);
