@@ -37,6 +37,33 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## Deploy the web app with Docker
+
+The image serves the Expo web app with nginx on port 80, not the Expo
+development server. Web output is `static`: Expo exports HTML and assets into
+`dist`, which the image copies into the nginx document root. Server rendering
+and API routes require a separate server deployment.
+
+Build and publish after authenticating to GHCR with an account that can push:
+
+```bash
+docker build --no-cache -t ghcr.io/hosung98/pace-frontend:v1 .
+docker push ghcr.io/hosung98/pace-frontend:v1
+```
+
+On the deployment host:
+
+```bash
+docker pull ghcr.io/hosung98/pace-frontend:v1
+docker run -d --name pace-frontend -p 8080:80 ghcr.io/hosung98/pace-frontend:v1
+```
+
+Open `http://localhost:8080` on that host. If a container already exists, stop
+and remove that container before running its replacement. Pushing the same tag
+does not update running containers: pull the new image and recreate them.
+Build for the deployment host's CPU architecture if it differs from the build
+machine.
+
 ## Get a fresh project
 
 When you're ready, run:

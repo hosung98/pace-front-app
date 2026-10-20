@@ -2,12 +2,11 @@
 FROM node:20-alpine AS builder
 
 WORKDIR /app
-
 COPY package*.json ./
-RUN npm install
-
+RUN npm ci
 COPY . .
 RUN npx expo export --platform web
+RUN test -s /app/dist/index.html
 
 # --- 2단계: 서빙 스테이지 ---
 FROM nginx:alpine
@@ -15,12 +14,11 @@ FROM nginx:alpine
 # 빌드 결과물 복사
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# ★ 추가: Nginx가 파일을 읽을 수 있도록 권한 부여
-RUN chmod -R 755 /usr/share/nginx/html
-
-# Nginx 라우팅 설정 복사
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
+# 권한 부여
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chmod -R 755 /usr/share/nginx/html
 
+EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

@@ -20,7 +20,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "server",
+      "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -36,6 +36,7 @@
       "expo-asset"
     ],
     "experiments": {
+      "baseUrl": "/dev",
       "typedRoutes": true,
       "reactCompiler": true
     }
