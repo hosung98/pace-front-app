@@ -75,7 +75,7 @@ export function LoginScreen() {
             <Text style={styles.eyebrow}>YOUR PACE, YOUR WAY</Text>
             <Text style={styles.title}>나만의 페이스로,{'\n'}함께 달려요.</Text>
             <Text style={styles.description}>
-              간편하게 로그인하고 PACE를 시작해 보세요.
+              계정 연결은 준비 중이에요. 먼저 PACE 화면을 둘러보세요.
             </Text>
           </View>
 
@@ -121,8 +121,7 @@ export function LoginScreen() {
           </Pressable>
 
           <Text style={styles.legalNotice}>
-            계속 진행하면 PACE의 이용약관 및 개인정보 처리방침에 동의한
-            것으로 간주됩니다.
+            이용약관과 개인정보 처리방침은 정식 로그인 연결 시 안내할 예정이에요.
           </Text>
         </View>
       </ScrollView>

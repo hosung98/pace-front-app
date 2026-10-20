@@ -281,6 +281,20 @@ PKCE 사용 여부는 플랫폼과 provider SDK 설정에 맞춰 확정합니다
 }
 ```
 
+피드의 필터는 `following`(팔로우 계정) 또는 `recommended`(추천 공개 게시물)로
+확장할 수 있습니다. 현재 앱 UI의 “친구”는 상호 승인 관계가 아니라 팔로우 관계를
+뜻하며, 비공개 계정은 요청 수락 후 게시물이 노출되는 방식으로 구분합니다.
+
+### `GET /social/posts/me?cursor=<cursor>&limit=20`
+
+로그인 사용자가 작성한 게시물을 최신순으로 반환합니다. 본인에게만 공개되는
+게시물도 포함하며, 각 항목에 `visibility`와 공유된 러닝 요약을 반환합니다.
+
+### `DELETE /social/posts/{postId}`
+
+내 게시물을 삭제합니다. 게시물 소유자만 삭제할 수 있어야 합니다. 성공 시
+`{ "success": true }`를 반환하고 연결된 미디어의 보관·정리 정책을 적용합니다.
+
 ### `POST /media/uploads`
 
 이미지 업로드용 짧은 수명의 presigned URL을 발급합니다. 앱은 반환된 URL로
@@ -397,8 +411,20 @@ JPEG, PNG, HEIC/WebP 여부를 앱과 스토리지에서 검증한 뒤 확정합
 
 ### `GET /social/users?query=<검색어>&cursor=<cursor>&limit=20`
 
-공개 프로필 중 표시명/사용자명으로 검색합니다. 전화번호나 이메일로 검색하지
-않으며, 차단된 계정은 결과에서 제외합니다.
+로그인 사용자가 공개 검색을 허용한 프로필 중 `nickname`(닉네임) 또는
+`alias`(별칭)으로 검색합니다. 검색은 대소문자를 구분하지 않는 부분 일치를
+지원합니다. 검색어는 2자 이상이어야 하며, 전화번호나 이메일로 검색하지
+않습니다. 차단된 계정과 검색 비허용 계정은 결과에서 제외합니다.
+
+응답 항목은 친구 요청 UI에 필요한 `userId`, `nickname`, `alias`,
+`profileImageUrl`, `followStatus`를 포함합니다. `followStatus`는
+`none | outgoing_pending | incoming_pending | following` 중 하나이며,
+전화번호·이메일·비공개 프로필의 러닝 기록은 응답하지 않습니다.
+
+### `GET /social/follows?type=following|followers&cursor=<cursor>&limit=20`
+
+내 팔로잉 또는 팔로워 목록을 반환합니다. 항목에는 `userId`, 표시명, 프로필
+이미지, `followStatus`를 포함하고 커서 기반으로 페이지를 나눕니다.
 
 ### `POST /social/follows` 및 `DELETE /social/follows/{userId}`
 
@@ -413,6 +439,16 @@ JPEG, PNG, HEIC/WebP 여부를 앱과 스토리지에서 검증한 뒤 확정합
   "followerCount": 84
 }
 ```
+
+비공개 계정이 받은 요청을 관리하기 위한 API:
+
+- `GET /social/follow-requests?direction=incoming`: 받은 요청 목록을 조회합니다.
+- `POST /social/follow-requests/{userId}/accept`: 요청을 수락하고 팔로우 관계를
+  활성화합니다.
+- `DELETE /social/follow-requests/{userId}`: 요청을 거절하거나 보낸 대기 요청을
+  취소합니다.
+
+요청 처리 API는 요청 대상 계정만 수락·거절할 수 있도록 권한을 검사합니다.
 
 ## 7. 내 프로필 및 앱 설정
 
@@ -432,6 +468,10 @@ JPEG, PNG, HEIC/WebP 여부를 앱과 스토리지에서 검증한 뒤 확정합
 
 ### `GET /users/me/settings`
 
+`weeklyGoalMeters` 기본값은 `20000`이며, `5000`~`100000`m 범위에서
+`5000`m 단위로 설정합니다. 로그인 전 앱은 같은 기준의 목표를 기기에 저장하고,
+계정 연동 후에는 이 설정 API와 동기화합니다.
+
 ```json
 {
   "distanceUnit": "km",
@@ -447,6 +487,7 @@ JPEG, PNG, HEIC/WebP 여부를 앱과 스토리지에서 검증한 뒤 확정합
 ### `PATCH /users/me/settings`
 
 일부 설정을 부분 갱신합니다. 미지원 값은 `400 VALIDATION_ERROR`로 응답합니다.
+`weeklyGoalMeters`는 기본값·범위·단위 검증을 통과해야 합니다.
 
 요청:
 
@@ -491,7 +532,7 @@ JPEG, PNG, HEIC/WebP 여부를 앱과 스토리지에서 검증한 뒤 확정합
 2. access/refresh token 만료 시간, 회전 및 폐기 정책
 3. 소셜 피드의 공개 선택 범위, 비공개 계정 승인, 신고·차단 및 게시물 삭제 정책
 4. 러닝 데이터 보관 기간, 계정 탈퇴 시 기록 및 GPS 경로 삭제 정책
-5. 주간 목표 기본값과 사용자가 목표를 변경할 수 있는지 여부
+5. 주간 목표 기본값은 20km이며, 앱에서 5km 단위로 5~100km까지 변경 가능
 6. 거리·페이스 계산, GPS 샘플링 간격 및 비정상 위치값 필터링 기준
 7. 오프라인 동기화 재시도, 중복 요청 처리 및 기록 충돌 정책
 8. 러닝 리마인더 시각, 푸시 토큰 수명 및 알림 수신 거부 처리
@@ -507,7 +548,8 @@ JPEG, PNG, HEIC/WebP 여부를 앱과 스토리지에서 검증한 뒤 확정합
 | 기록 상세 | `GET /runs/{runId}` |
 | 통계 | `GET /stats/running` |
 | 소셜 피드 | `GET /social/feed`, media upload API, `POST /social/posts`, reactions API |
-| 친구 찾기 | `GET /social/users`, `POST /social/follows`, `DELETE /social/follows/{userId}` |
+| 친구 찾기/관리 | `GET /social/users`, `GET /social/follows`, `POST /social/follows`, follow request API |
+| 내 소셜 활동 | `GET /social/posts/me`, `DELETE /social/posts/{postId}` |
 | 마이 프로필 | `GET /users/me`, `PATCH /users/me` |
 | 앱 설정 | `GET /users/me/settings`, `PATCH /users/me/settings`, push token API |
 | 계정 삭제 | `DELETE /users/me` |

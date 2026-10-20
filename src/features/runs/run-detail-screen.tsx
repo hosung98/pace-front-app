@@ -6,15 +6,6 @@ import { PaceBrand } from '@/components/pace-brand';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 
-const splits = [
-  { km: '1 km', pace: "6'05''", duration: '06:05' },
-  { km: '2 km', pace: "6'14''", duration: '12:19' },
-  { km: '3 km', pace: "6'18''", duration: '18:37' },
-  { km: '4 km', pace: "6'10''", duration: '24:47' },
-  { km: '5 km', pace: "6'05''", duration: '30:52' },
-  { km: '0.24 km', pace: "6'31''", duration: '32:29' },
-];
-
 export function RunDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -25,11 +16,17 @@ export function RunDetailScreen() {
     duration?: string;
     pace?: string;
     durationSeconds?: string;
+    routePointCount?: string;
   }>();
   const isRecordedRun = Boolean(params.startedAt);
-  const distance = params.distance ?? '5.24';
-  const duration = params.duration ?? '32:29';
-  const pace = params.pace ?? "6'12''";
+  const distanceKmParam = Number(params.distance ?? 0);
+  const distanceKm = Number.isFinite(distanceKmParam) && distanceKmParam > 0
+    ? distanceKmParam
+    : 0;
+  const distance = distanceKm.toFixed(2);
+  const duration = params.duration ?? '--:--';
+  const pace = params.pace ?? '—';
+  const routePointCount = Number(params.routePointCount ?? 0);
   const startedAt = params.startedAt
     ? new Date(Number(params.startedAt)).toLocaleString('ko-KR', {
         month: 'long',
@@ -50,8 +47,8 @@ export function RunDetailScreen() {
           <PaceBrand />
           <View style={styles.headerSpacer} />
         </View>
-        <Text style={styles.eyebrow}>RUN DETAIL · SAMPLE</Text>
-        <Text style={styles.title}>{params.title ?? '한강 저녁 러닝'}</Text>
+        <Text style={styles.eyebrow}>{isRecordedRun ? 'RUN DETAIL · DEVICE' : 'RUN DETAIL · PREVIEW'}</Text>
+        <Text style={styles.title}>{params.title ?? '러닝 기록'}</Text>
         <Text style={styles.date}>{startedAt}</Text>
       </View>
 
@@ -60,7 +57,9 @@ export function RunDetailScreen() {
           <Text style={styles.mapIcon}>⌁</Text>
           <Text style={styles.mapTitle}>러닝 경로 미리보기</Text>
           <Text style={styles.mapCaption}>
-            {isRecordedRun ? 'GPS 경로는 기기에 저장되어 있어요.' : '샘플 기록 미리보기입니다.'}
+            {isRecordedRun && routePointCount > 0
+              ? `GPS 경로 ${routePointCount}개 지점이 기기에 저장되어 있어요.`
+              : 'GPS 경로를 지도에 표시하는 기능은 추후 추가될 예정이에요.'}
           </Text>
         </View>
         <View style={styles.primaryMetric}>
@@ -72,32 +71,17 @@ export function RunDetailScreen() {
           <Metric label="평균 페이스" value={`${pace} /km`} />
           <Metric
             label="평균 속도"
-            value={params.durationSeconds && Number(params.durationSeconds) > 0
-              ? `${((Number(distance) * 3600) / Number(params.durationSeconds)).toFixed(1)} km/h`
-              : '9.7 km/h'}
+            value={params.durationSeconds &&
+              Number.isFinite(Number(params.durationSeconds)) &&
+              Number(params.durationSeconds) > 0
+              ? `${((distanceKm * 3600) / Number(params.durationSeconds)).toFixed(1)} km/h`
+              : '—'}
           />
-          <Metric label="소모 칼로리" value="342 kcal" />
+          <Metric label="GPS 포인트" value={routePointCount > 0 ? `${routePointCount}개` : '—'} />
         </View>
-        {!isRecordedRun ? (
-          <>
-            <Text style={styles.sectionTitle}>구간별 페이스</Text>
-            <View style={styles.splits}>
-              {splits.map((split, index) => (
-                <View key={`${split.km}-${index}`} style={styles.splitRow}>
-                  <Text style={styles.splitKm}>{split.km}</Text>
-                  <View style={styles.splitBarTrack}>
-                    <View style={[styles.splitBar, { width: `${Math.max(32, 100 - index * 7)}%` }]} />
-                  </View>
-                  <Text style={styles.splitPace}>{split.pace}</Text>
-                </View>
-              ))}
-            </View>
-          </>
-        ) : (
-          <Text style={styles.note}>
-            GPS 경로는 이 기기에 저장되어 있습니다. 지도 및 구간별 기록은 추후 연결할 수 있어요.
-          </Text>
-        )}
+        <Text style={styles.note}>
+          거리와 페이스는 이 기기에 저장된 GPS 기록을 기준으로 표시합니다.
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -134,12 +118,5 @@ const styles = StyleSheet.create({
   metricGrid: { marginTop: 20, paddingVertical: 16, flexDirection: 'row', flexWrap: 'wrap', rowGap: 20, borderRadius: 17, backgroundColor: C.surface },
   metric: { width: '50%', paddingHorizontal: 17, gap: 6 },
   metricValue: { color: C.text, fontSize: 13, fontWeight: '600' },
-  sectionTitle: { marginTop: 25, color: C.text, fontSize: 15, fontWeight: '700' },
-  splits: { marginTop: 8, paddingHorizontal: 15, borderRadius: 17, backgroundColor: C.surface },
-  splitRow: { minHeight: 43, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  splitKm: { width: 48, color: C.muted, fontSize: 10 },
-  splitBarTrack: { flex: 1, height: 5, borderRadius: 4, backgroundColor: C.raised, overflow: 'hidden' },
-  splitBar: { height: '100%', borderRadius: 4, backgroundColor: C.accent },
-  splitPace: { width: 47, color: C.text, fontSize: 10, textAlign: 'right', fontVariant: ['tabular-nums'] },
   note: { marginTop: 19, color: C.subtle, fontSize: 9, lineHeight: 15, textAlign: 'center' },
 });

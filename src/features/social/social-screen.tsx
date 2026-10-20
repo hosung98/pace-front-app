@@ -2,15 +2,12 @@ import { useState } from 'react';
 import {
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import { SymbolView } from 'expo-symbols';
 
-import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { TabScreenShell, tabScreenStyles } from '@/features/navigation/tab-screen-shell';
@@ -55,64 +52,17 @@ const posts = [
 ];
 
 type SocialSection = 'feed' | 'friends' | 'mine';
-const visibilityOptions = [
-  { value: 'followers', label: '팔로워' },
-  { value: 'public', label: '전체 공개' },
-  { value: 'private', label: '나만 보기' },
-] as const;
-
-type PostVisibility = (typeof visibilityOptions)[number]['value'];
 
 export function SocialScreen() {
   const [section, setSection] = useState<SocialSection>('feed');
-  const [message, setMessage] = useState('');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showComposer, setShowComposer] = useState(false);
-  const [postMessage, setPostMessage] = useState('');
-  const [visibility, setVisibility] = useState<PostVisibility | null>(null);
-  const [selectedImages, setSelectedImages] = useState<ImagePicker.ImagePickerAsset[]>([]);
-
-  const pickImages = async () => {
-    if (selectedImages.length >= 4) {
-      setMessage('사진은 게시물 하나에 최대 4장까지 추가할 수 있어요.');
-      return;
-    }
-
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        setErrorMessage('사진을 첨부하려면 사진 라이브러리 접근을 허용해 주세요.');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: true,
-        selectionLimit: 4 - selectedImages.length,
-        quality: 0.85,
-      });
-
-      if (!result.canceled) {
-        setSelectedImages((current) => [
-          ...current,
-          ...result.assets.filter(
-            (asset) => !current.some((selected) => selected.uri === asset.uri),
-          ),
-        ].slice(0, 4));
-        setMessage('');
-      }
-    } catch (error) {
-      console.error('Unable to select social post images.', error);
-      setErrorMessage('사진을 불러오지 못했어요. 다시 시도해 주세요.');
-    }
-  };
 
   return (
     <TabScreenShell
       eyebrow="PACE COMMUNITY"
       title="러닝 피드"
-      description="친구들의 오늘을 구경하고 함께 응원해요.">
+      description="친구들의 오늘을 구경하고 함께 응원해요."
+      disclaimer="샘플 피드 미리보기입니다. 게시물과 친구 기능은 서버 연결 후 사용할 수 있어요.">
       <View style={styles.sectionTabs}>
         {([
           ['feed', '피드'],
@@ -123,10 +73,7 @@ export function SocialScreen() {
             key={key}
             accessibilityRole="button"
             accessibilityState={{ selected: section === key }}
-            onPress={() => {
-              setSection(key);
-              setMessage('');
-            }}
+            onPress={() => setSection(key)}
             style={[styles.sectionTab, section === key && styles.sectionTabActive]}>
             <Text style={[styles.sectionTabText, section === key && styles.sectionTabTextActive]}>
               {label}
@@ -138,99 +85,9 @@ export function SocialScreen() {
       {section === 'feed' ? <>
       <View style={styles.previewNotice}>
         <Text style={styles.previewNoticeText}>
-          샘플 피드입니다. 응원·댓글·게시 기능은 서버 연동 후 사용할 수 있어요.
+          샘플 피드 미리보기예요. 게시·응원·댓글·친구 기능은 서버 연결 후 사용할 수 있어요.
         </Text>
       </View>
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => {
-          if (showComposer) {
-            setVisibility(null);
-            setPostMessage('');
-            setSelectedImages([]);
-          }
-          setShowComposer((current) => !current);
-          setMessage('');
-        }}
-        style={({ pressed }) => [styles.createPostButton, pressed && styles.pressed]}>
-        <View style={styles.createAvatar}><Text style={styles.avatarText}>나</Text></View>
-        <Text style={styles.createPostPrompt}>오늘 러닝은 어땠나요?</Text>
-        <Text style={styles.createPostAction}>공유하기</Text>
-      </Pressable>
-
-      {showComposer ? (
-        <View style={[tabScreenStyles.card, styles.composer]}>
-          <Text style={styles.composerTitle}>러닝 이야기 나누기</Text>
-          <TextInput
-            accessibilityLabel="러닝 게시물 내용"
-            multiline
-            maxLength={220}
-            onChangeText={setPostMessage}
-            placeholder="오늘의 러닝을 기록해 보세요."
-            placeholderTextColor={C.subtle}
-            style={styles.composerInput}
-            textAlignVertical="top"
-            value={postMessage}
-          />
-          {selectedImages.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imageList}>
-              {selectedImages.map((asset, index) => (
-                <View key={asset.uri} style={styles.imagePreview}>
-                  <Image source={{ uri: asset.uri }} style={styles.image} />
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`선택한 사진 ${index + 1} 삭제`}
-                    onPress={() => setSelectedImages((current) => current.filter((item) => item.uri !== asset.uri))}
-                    style={styles.removeImageButton}>
-                    <Text style={styles.removeImageText}>×</Text>
-                  </Pressable>
-                </View>
-              ))}
-            </ScrollView>
-          ) : null}
-          <View style={styles.composerActions}>
-            <Pressable
-              accessibilityRole="button"
-              disabled={selectedImages.length >= 4}
-              onPress={pickImages}
-              style={({ pressed }) => [
-                styles.addImageButton,
-                selectedImages.length >= 4 && styles.disabledButton,
-                pressed && styles.pressed,
-              ]}>
-              <Text style={styles.addImageIcon}>▧</Text>
-              <Text style={styles.addImageText}>사진 {selectedImages.length}/4</Text>
-            </Pressable>
-            <Text style={styles.characterCount}>{postMessage.length}/220</Text>
-          </View>
-          <Text style={styles.visibilityTitle}>누가 볼 수 있나요? 매번 선택할 수 있어요.</Text>
-          <View style={styles.visibilityOptions}>
-            {visibilityOptions.map((option) => {
-              const isSelected = visibility === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isSelected }}
-                  onPress={() => setVisibility(option.value)}
-                  style={[styles.visibilityOption, isSelected && styles.visibilityOptionActive]}>
-                  <Text style={[styles.visibilityText, isSelected && styles.visibilityTextActive]}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            disabled
-            style={[styles.publishButton, styles.disabledButton]}>
-            <Text style={styles.publishButtonText}>서버 연동 후 게시할 수 있어요</Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}
 
       <View style={styles.feedHeading}>
         <Text style={styles.feedTitle}>샘플 러닝</Text>
@@ -378,10 +235,6 @@ export function SocialScreen() {
           </View>
         </View>
       )}
-      <PaceErrorDialog
-        message={errorMessage}
-        onClose={() => setErrorMessage(null)}
-      />
     </TabScreenShell>
   );
 }
@@ -409,34 +262,7 @@ const styles = StyleSheet.create({
   sectionTabActive: { backgroundColor: '#303A22' },
   sectionTabText: { color: C.muted, fontSize: 10, fontWeight: '600' },
   sectionTabTextActive: { color: C.accent },
-  createPostButton: { minHeight: 58, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 11, borderRadius: 16, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
-  createAvatar: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#303A22' },
-  createPostPrompt: { flex: 1, color: C.muted, fontSize: 10 },
-  createPostAction: { color: C.accent, fontSize: 10, fontWeight: '700' },
-  composer: { marginTop: 12 },
-  composerTitle: { color: C.text, fontSize: 13, fontWeight: '700' },
-  composerInput: { minHeight: 80, marginTop: 12, padding: 12, color: C.text, fontSize: 11, lineHeight: 18, borderRadius: 12, backgroundColor: C.raised },
-  imageList: { gap: 9, paddingTop: 12 },
-  imagePreview: { width: 74, height: 74, overflow: 'hidden', borderRadius: 12, backgroundColor: C.raised },
-  image: { width: '100%', height: '100%' },
-  removeImageButton: { position: 'absolute', top: 4, right: 4, width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: '#0C0D0F' },
-  removeImageText: { color: C.text, fontSize: 17, lineHeight: 20 },
-  composerActions: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  addImageButton: { minHeight: 34, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, backgroundColor: '#20251B' },
-  addImageIcon: { color: C.accent, fontSize: 15 },
-  addImageText: { color: C.accent, fontSize: 9, fontWeight: '600' },
-  disabledButton: { opacity: 0.5 },
   disabledAction: { opacity: 0.42 },
-  characterCount: { color: C.subtle, fontSize: 9 },
-  visibilityTitle: { marginTop: 8, color: C.muted, fontSize: 9 },
-  visibilityOptions: { marginTop: 9, flexDirection: 'row', gap: 7 },
-  visibilityOption: { flex: 1, minHeight: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: C.raised },
-  visibilityOptionActive: { backgroundColor: '#303A22', borderWidth: 1, borderColor: '#718A35' },
-  visibilityText: { color: C.muted, fontSize: 9, fontWeight: '500' },
-  visibilityTextActive: { color: C.accent, fontWeight: '700' },
-  publishButton: { minHeight: 44, marginTop: 13, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: C.accent },
-  publishButtonText: { color: C.accentInk, fontSize: 11, fontWeight: '700' },
-  message: { marginTop: 9, color: C.muted, fontSize: 10, lineHeight: 16 },
   feedHeading: { marginTop: 23, marginBottom: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   feedTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
   feedCount: { color: C.accent, fontSize: 10 },

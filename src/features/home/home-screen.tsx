@@ -1,12 +1,24 @@
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 
 import { PaceBrand, PaceMark } from '@/components/pace-brand';
+import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
-
-import { homeDashboardData } from './home-dashboard-data';
+import {
+  formatPace,
+  getWeekStart,
+  getWeeklyInsights,
+  type WeeklyInsights,
+} from '@/features/running/run-insights';
+import {
+  formatDuration,
+  readCompletedRuns,
+  type CompletedRun,
+} from '@/features/running/run-storage';
+import { readWeeklyGoalKm } from '@/features/running/weekly-goal-storage';
 
 function SectionHeading({
   title,
@@ -23,7 +35,13 @@ function SectionHeading({
   );
 }
 
-function TodayRunCard({ onStartRun }: { onStartRun: () => void }) {
+function TodayRunCard({
+  onStartRun,
+  distanceKm,
+}: {
+  onStartRun: () => void;
+  distanceKm: number;
+}) {
   return (
     <View style={styles.todayCard}>
       <View style={styles.todayCardTop}>
@@ -37,10 +55,12 @@ function TodayRunCard({ onStartRun }: { onStartRun: () => void }) {
       </View>
 
       <View style={styles.todayMetric}>
-        <Text style={styles.todayDistance}>0.00</Text>
+        <Text style={styles.todayDistance}>{distanceKm.toFixed(2)}</Text>
         <Text style={styles.todayUnit}>km</Text>
       </View>
-      <Text style={styles.todayCaption}>오늘의 러닝 거리를 채워보세요</Text>
+      <Text style={styles.todayCaption}>
+        {distanceKm > 0 ? '오늘 기록한 러닝 거리예요' : '오늘의 러닝 거리를 채워보세요'}
+      </Text>
 
       <Pressable
         accessibilityRole="button"
@@ -56,10 +76,18 @@ function TodayRunCard({ onStartRun }: { onStartRun: () => void }) {
   );
 }
 
-function WeeklyProgressCard() {
-  const { weeklyDistanceKm, weeklyGoalKm, weeklyRunCount, weeklyRuns } =
-    homeDashboardData;
+function WeeklyProgressCard({
+  insights,
+  weeklyGoalKm,
+}: {
+  insights: WeeklyInsights;
+  weeklyGoalKm: number;
+}) {
+  const weeklyDistanceKm = insights.distanceKm;
+  const weeklyRunCount = insights.runCount;
+  const weekDays = ['월', '화', '수', '목', '금', '토', '일'];
   const progress = Math.min(weeklyDistanceKm / weeklyGoalKm, 1);
+  const maxDayDistance = Math.max(weeklyGoalKm, ...insights.dailyDistancesKm, 1);
 
   return (
     <View style={styles.weeklyCard}>
@@ -91,21 +119,25 @@ function WeeklyProgressCard() {
         <View style={[styles.goalProgress, { width: `${progress * 100}%` }]} />
       </View>
       <Text style={styles.goalCaption}>
-        이번 주 목표 {weeklyGoalKm}km까지{' '}
-        <Text style={styles.goalRemaining}>
-          {(weeklyGoalKm - weeklyDistanceKm).toFixed(1)}km
-        </Text>
+        {weeklyDistanceKm >= weeklyGoalKm
+          ? '이번 주 목표를 달성했어요!'
+          : <>
+              이번 주 목표 {weeklyGoalKm}km까지{' '}
+              <Text style={styles.goalRemaining}>
+                {(weeklyGoalKm - weeklyDistanceKm).toFixed(1)}km
+              </Text>
+            </>}
       </Text>
 
       <View style={styles.weekChart}>
-        {weeklyRuns.map(({ day, distanceKm }) => {
+        {insights.dailyDistancesKm.map((distanceKm, index) => {
           const hasRun = distanceKm > 0;
           const height = hasRun
-            ? Math.max(12, (distanceKm / weeklyGoalKm) * 68)
+            ? Math.max(12, (distanceKm / maxDayDistance) * 68)
             : 5;
 
           return (
-            <View key={day} style={styles.weekDay}>
+            <View key={weekDays[index]} style={styles.weekDay}>
               <View style={styles.weekBarTrack}>
                 <View
                   style={[
@@ -116,7 +148,7 @@ function WeeklyProgressCard() {
                 />
               </View>
               <Text style={[styles.weekDayLabel, hasRun && styles.weekDayActive]}>
-                {day}
+                {weekDays[index]}
               </Text>
             </View>
           );
@@ -126,20 +158,34 @@ function WeeklyProgressCard() {
   );
 }
 
-function RecentRunCard() {
-  const { recentRun } = homeDashboardData;
+function RecentRunCard({ recentRun }: { recentRun: CompletedRun | null }) {
+  if (!recentRun) {
+    return (
+      <View style={styles.recentCard}>
+        <Text style={styles.emptyRecentTitle}>아직 저장된 러닝이 없어요</Text>
+        <Text style={styles.emptyRecentDescription}>
+          첫 러닝을 완료하면 거리와 페이스를 여기서 확인할 수 있어요.
+        </Text>
+      </View>
+    );
+  }
   const metrics = [
-    { label: '거리', value: recentRun.distanceKm.toFixed(2), unit: 'km' },
-    { label: '시간', value: recentRun.duration },
-    { label: '평균 페이스', value: recentRun.averagePace, unit: '/km' },
+    { label: '거리', value: (recentRun.distanceMeters / 1000).toFixed(2), unit: 'km' },
+    { label: '시간', value: formatDuration(recentRun.durationSeconds) },
+    { label: '평균 페이스', value: formatPace(recentRun.averagePaceSecondsPerKm), unit: '/km' },
   ];
+  const dateLabel = new Date(recentRun.startedAt).toLocaleDateString('ko-KR', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
+  });
 
   return (
     <View style={styles.recentCard}>
       <View style={styles.recentHeader}>
         <View>
           <Text style={styles.eyebrow}>RECENT RUN</Text>
-          <Text style={styles.recentDate}>{recentRun.dateLabel}</Text>
+          <Text style={styles.recentDate}>{dateLabel}</Text>
         </View>
         <View style={styles.recentIcon}>
           <Text style={styles.recentIconText}>↗</Text>
@@ -164,6 +210,40 @@ function RecentRunCard() {
 
 export function HomeScreen() {
   const router = useRouter();
+  const [completedRuns, setCompletedRuns] = useState<CompletedRun[]>([]);
+  const [weeklyGoalKm, setWeeklyGoalKm] = useState(20);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      Promise.all([readCompletedRuns(), readWeeklyGoalKm()])
+        .then(([runs, goal]) => {
+          if (!isActive) return;
+          setCompletedRuns(runs);
+          setWeeklyGoalKm(goal);
+        })
+        .catch((error: unknown) => {
+          console.error('Unable to load home running insights.', error);
+          if (isActive) {
+            setErrorMessage('러닝 정보를 불러오지 못했어요. 저장 공간을 확인해 주세요.');
+          }
+        });
+      return () => {
+        isActive = false;
+      };
+    }, []),
+  );
+
+  const now = new Date();
+  const weeklyInsights = getWeeklyInsights(completedRuns, now);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+  const todayDistanceKm = completedRuns
+    .filter((run) => run.startedAt >= todayStart && run.startedAt < tomorrowStart)
+    .reduce((total, run) => total + run.distanceMeters / 1000, 0);
+  const recentRun = completedRuns[0] ?? null;
+  const weekStart = getWeekStart(now);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -190,23 +270,37 @@ export function HomeScreen() {
         <View style={styles.container}>
           <TodayRunCard
             onStartRun={() => router.push('/run-tracking')}
+            distanceKm={todayDistanceKm}
           />
 
           <View style={styles.section}>
-            <SectionHeading title="이번 주 러닝" detail="주간 목표" />
-            <WeeklyProgressCard />
+            <SectionHeading title="이번 주 러닝" detail="목표 관리" />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="주간 러닝 목표 변경"
+              onPress={() => router.push('/weekly-goal')}
+              style={({ pressed }) => pressed && styles.pressed}>
+              <WeeklyProgressCard
+                insights={weeklyInsights}
+                weeklyGoalKm={weeklyGoalKm}
+              />
+            </Pressable>
           </View>
 
           <View style={styles.section}>
-            <SectionHeading title="최근 러닝" detail="샘플 기록" />
-            <RecentRunCard />
+            <SectionHeading title="최근 러닝" detail={recentRun ? '기기 저장 기록' : '첫 러닝을 시작해 보세요'} />
+            <RecentRunCard recentRun={recentRun} />
           </View>
 
           <Text style={styles.disclaimer}>
-            화면에 표시된 기록은 백엔드 연동 전 샘플 데이터입니다.
+            이번 주는 {weekStart.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })} 시작 기준이에요. 기록은 이 기기에 저장됩니다.
           </Text>
         </View>
       </ScrollView>
+      <PaceErrorDialog
+        message={errorMessage}
+        onClose={() => setErrorMessage(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -501,6 +595,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  emptyRecentTitle: { color: C.text, fontSize: 12, fontWeight: '600' },
+  emptyRecentDescription: { marginTop: 6, color: C.muted, fontSize: 10, lineHeight: 16 },
   recentIcon: {
     width: 34,
     height: 34,

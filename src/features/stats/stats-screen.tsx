@@ -1,25 +1,67 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 
+import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { TabScreenShell, tabScreenStyles } from '@/features/navigation/tab-screen-shell';
+import {
+  formatPace,
+  getAllTimeInsights,
+  getMonthlyInsights,
+  getWeeklyInsights,
+} from '@/features/running/run-insights';
+import { readCompletedRuns, type CompletedRun } from '@/features/running/run-storage';
 
-const weeklyValues = [2.8, 0, 4.36, 0, 0, 5.24, 0];
-const monthlyValues = [8.2, 12.4, 9.6, 12.4];
+type Period = '주간' | '월간';
 
 export function StatsScreen() {
-  const [period, setPeriod] = useState<'주간' | '월간'>('주간');
-  const values = period === '주간' ? weeklyValues : monthlyValues;
+  const [period, setPeriod] = useState<Period>('주간');
+  const [completedRuns, setCompletedRuns] = useState<CompletedRun[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      readCompletedRuns()
+        .then((runs) => {
+          if (isActive) setCompletedRuns(runs);
+        })
+        .catch((error: unknown) => {
+          console.error('Unable to load running statistics.', error);
+          if (isActive) {
+            setErrorMessage('러닝 통계를 불러오지 못했어요. 저장 공간을 확인해 주세요.');
+          }
+        });
+      return () => {
+        isActive = false;
+      };
+    }, []),
+  );
+
+  const insights = useMemo(
+    () => period === '주간'
+      ? getWeeklyInsights(completedRuns)
+      : getMonthlyInsights(completedRuns),
+    [completedRuns, period],
+  );
+  const allTime = useMemo(() => getAllTimeInsights(completedRuns), [completedRuns]);
+  const values = period === '주간'
+    ? ('dailyDistancesKm' in insights ? insights.dailyDistancesKm : [])
+    : ('weeklyDistancesKm' in insights ? insights.weeklyDistancesKm : []);
   const labels = period === '주간'
     ? ['월', '화', '수', '목', '금', '토', '일']
-    : ['1주', '2주', '3주', '4주'];
+    : values.map((_, index) => `${index + 1}주`);
+  const maxValue = Math.max(...values, 1);
+  const distanceKm = insights.distanceKm;
 
   return (
     <TabScreenShell
       eyebrow="YOUR PROGRESS"
       title="꾸준함이 만든 변화"
-      description="나의 페이스와 러닝 습관을 한눈에 확인해요.">
+      description="기기에 저장된 러닝 기록으로 나의 습관을 확인해요."
+      disclaimer="통계는 이 기기에 저장된 완료 러닝 기록을 기준으로 계산합니다.">
       <View style={styles.segment}>
         {(['주간', '월간'] as const).map((item) => (
           <Pressable
@@ -34,25 +76,38 @@ export function StatsScreen() {
       </View>
       <View style={tabScreenStyles.card}>
         <Text style={styles.chartTitle}>{period === '주간' ? '이번 주 거리' : '이번 달 거리'}</Text>
-        <Text style={styles.distance}>12.4<Text style={styles.distanceUnit}> km</Text></Text>
+        <Text style={styles.distance}>{distanceKm.toFixed(2)}<Text style={styles.distanceUnit}> km</Text></Text>
         <View style={styles.chart}>
           {values.map((value, index) => (
             <View key={labels[index]} style={styles.chartColumn}>
               <View style={styles.barTrack}>
-                <View style={[styles.bar, { height: `${Math.max(value === 0 ? 5 : 18, (value / 14) * 100)}%` }, value > 0 && styles.barActive]} />
+                <View style={[
+                  styles.bar,
+                  { height: `${value > 0 ? Math.max(8, (value / maxValue) * 100) : 4}%` },
+                  value > 0 && styles.barActive,
+                ]} />
               </View>
               <Text style={styles.chartLabel}>{labels[index]}</Text>
             </View>
           ))}
         </View>
+        {completedRuns.length === 0 ? (
+          <Text style={styles.emptyHint}>
+            첫 러닝을 완료하면 실제 기록이 차트와 요약에 표시됩니다.
+          </Text>
+        ) : null}
       </View>
-      <Text style={styles.sectionTitle}>러닝 요약</Text>
+      <Text style={styles.sectionTitle}>전체 러닝 요약</Text>
       <View style={styles.statsGrid}>
-        <StatCard label="총 러닝 거리" value="86.4" unit="km" detail="지난달보다 12% 더 달렸어요" />
-        <StatCard label="총 러닝 횟수" value="18" unit="회" detail="평균 주 4회 러닝" />
-        <StatCard label="평균 페이스" value="6'18''" unit="/km" detail="조금씩 빨라지고 있어요" />
-        <StatCard label="최장 거리" value="10.2" unit="km" detail="10월 12일 기록" />
+        <StatCard label="총 러닝 거리" value={allTime.distanceKm.toFixed(1)} unit="km" detail="기기에 저장된 기록" />
+        <StatCard label="총 러닝 횟수" value={String(allTime.runCount)} unit="회" detail="완료한 GPS 러닝" />
+        <StatCard label="평균 페이스" value={formatPace(allTime.averagePaceSecondsPerKm)} unit="/km" detail="전체 거리 가중 평균" />
+        <StatCard label="최장 거리" value={allTime.longestRunKm.toFixed(2)} unit="km" detail="저장된 기록 중 최장" />
       </View>
+      <PaceErrorDialog
+        message={errorMessage}
+        onClose={() => setErrorMessage(null)}
+      />
     </TabScreenShell>
   );
 }
@@ -82,6 +137,7 @@ const styles = StyleSheet.create({
   bar: { width: '58%', minHeight: 5, borderRadius: 5, backgroundColor: C.raised },
   barActive: { backgroundColor: C.accent },
   chartLabel: { color: C.subtle, fontSize: 9 },
+  emptyHint: { marginTop: 12, color: C.subtle, fontSize: 10, lineHeight: 15 },
   sectionTitle: { marginTop: 26, marginBottom: 2, color: C.text, fontSize: 16, fontWeight: '700' },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   statCard: { width: '48%', flexGrow: 1, minHeight: 116, marginTop: 10, padding: 14, borderRadius: 17, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },

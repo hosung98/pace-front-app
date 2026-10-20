@@ -10,12 +10,14 @@ type TabScreenShellProps = PropsWithChildren<{
   eyebrow: string;
   title: string;
   description: string;
+  disclaimer?: string;
 }>;
 
 export function TabScreenShell({
   eyebrow,
   title,
   description,
+  disclaimer = '화면과 데이터는 백엔드 연동 전 미리보기입니다.',
   children,
 }: TabScreenShellProps) {
   return (
@@ -39,9 +41,7 @@ export function TabScreenShell({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}>
         {children}
-        <Text style={styles.disclaimer}>
-          화면과 데이터는 백엔드 연동 전 미리보기입니다.
-        </Text>
+        <Text style={styles.disclaimer}>{disclaimer}</Text>
       </ScrollView>
     </SafeAreaView>
   );
