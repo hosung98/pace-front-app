@@ -49,7 +49,7 @@ export function OnboardingFooter({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
-            isLastSlide ? '온보딩 처음부터 다시 보기' : '다음 온보딩'
+            isLastSlide ? '로그인 화면으로 이동' : '다음 온보딩'
           }
           onPress={onAdvance}
           style={({ pressed }) => [
@@ -62,19 +62,19 @@ export function OnboardingFooter({
               styles.nextText,
               isLastSlide && styles.replayText,
             ]}>
-            {isLastSlide ? '처음부터 다시 보기' : '다음'}
+            {isLastSlide ? '로그인하고 시작하기' : '다음'}
           </Text>
           <Text
             style={[
               styles.nextArrow,
               isLastSlide && styles.replayText,
             ]}>
-            {isLastSlide ? '↺' : '→'}
+            →
           </Text>
         </Pressable>
       </View>
       <Text style={styles.footerNote}>
-        {isLastSlide ? '우리의 첫 러닝, 곧 만나요.' : 'EVERY PACE MATTERS.'}
+        {isLastSlide ? '나에게 맞는 페이스를 찾아보세요.' : 'EVERY PACE MATTERS.'}
       </Text>
     </View>
   );

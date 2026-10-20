@@ -6,6 +6,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PaceColors as C } from '@/constants/pace';
@@ -17,6 +18,7 @@ import { OnboardingSlideContent } from './onboarding-slide-content';
 import { useOnboardingPager } from './use-onboarding-pager';
 
 export function OnboardingScreen() {
+  const router = useRouter();
   const { width, height } = useWindowDimensions();
   const [contentHeight, setContentHeight] = useState(height - 240);
   const [copyHeight, setCopyHeight] = useState(230);
@@ -44,6 +46,15 @@ export function OnboardingScreen() {
   );
   const needsScroll = !isWideLayout && availableArtHeight < 72;
   const slide = onboardingSlides[page];
+
+  const handleAdvance = () => {
+    if (isLastSlide) {
+      router.push('/login');
+      return;
+    }
+
+    advancePage();
+  };
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -105,7 +116,7 @@ export function OnboardingScreen() {
           isLastSlide={isLastSlide}
           wide={isWideLayout}
           onSelectPage={setPage}
-          onAdvance={advancePage}
+          onAdvance={handleAdvance}
         />
       </View>
     </SafeAreaView>
