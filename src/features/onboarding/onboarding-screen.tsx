@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   Animated,
+  Platform,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
@@ -39,9 +40,9 @@ export function OnboardingScreen() {
   const availableArtHeight =
     contentHeight - 24 - (isCompactLayout ? 42 : 59) - copyHeight;
   const artHeight = Math.max(72, availableArtHeight);
-  const mobileArtWidth = Math.min(370, (artHeight * 360) / 390);
+  const mobileArtWidth = Math.min(400, (artHeight * 360) / 390);
   const artWidth = Math.min(
-    width - 56,
+    width - 32,
     isWideLayout ? 410 : mobileArtWidth,
   );
   const needsScroll = !isWideLayout && availableArtHeight < 72;
@@ -57,7 +58,13 @@ export function OnboardingScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView
+      style={styles.screen}
+      edges={
+        Platform.OS === 'web'
+          ? ['top', 'right', 'left']
+          : ['top', 'right', 'bottom', 'left']
+      }>
       <View style={[styles.shell, isWideLayout && styles.wideShell]}>
         <OnboardingHeader
           isLastSlide={isLastSlide}
