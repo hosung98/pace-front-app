@@ -173,7 +173,7 @@ function CommunityArt() {
 }
 
 export function OnboardingArt({ page, width }: { page: number; width: number }) {
-  const scale = Math.min(width / 360, 1.16);
+  const scale = Math.min(width / 360, 1.2);
   return (
     <View
       accessibilityElementsHidden
