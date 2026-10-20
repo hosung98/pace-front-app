@@ -109,6 +109,17 @@ export function LoginScreen() {
             </Text>
           </View>
 
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/main')}
+            style={({ pressed }) => [
+              styles.previewButton,
+              pressed && styles.pressed,
+            ]}>
+            <Text style={styles.previewButtonText}>메인 화면 미리보기</Text>
+            <Text style={styles.previewButtonArrow}>→</Text>
+          </Pressable>
+
           <Text style={styles.legalNotice}>
             계속 진행하면 PACE의 이용약관 및 개인정보 처리방침에 동의한
             것으로 간주됩니다.
@@ -232,6 +243,23 @@ const styles = StyleSheet.create({
     color: C.subtle,
     fontSize: 11,
     textAlign: 'center',
+  },
+  previewButton: {
+    minHeight: 48,
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  previewButtonText: {
+    color: C.accent,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  previewButtonArrow: {
+    color: C.accent,
+    fontSize: 17,
   },
   legalNotice: {
     marginTop: 32,

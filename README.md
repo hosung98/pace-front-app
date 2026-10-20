@@ -5,15 +5,30 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 ## Current scope
 
 PACE is a running journal with a dark, mobile-first interface. This first slice
-contains a branded launch splash and three Korean onboarding pages: recording a
-run, personal progress, and running together. All illustrated metrics and social
-content are examples, not connected features.
+contains a branded launch splash, three Korean onboarding pages, a social-login
+UI prototype, and sample running home, history, statistics, community, profile,
+and settings screens. Screen data and social login buttons are prototypes and
+are not connected to a backend.
 
 - Next, centered page indicators, and horizontal swipes across the illustration
   and text area navigate the onboarding. Swipe right to go back; there is no back
   button. Skip goes to page three.
-- The final page stays open; replay returns to page one. There is no login, home,
-  permission request, tracking, or saved onboarding-completion state yet.
+- The final onboarding page leads to a login prototype. Its provider buttons do
+  not authenticate yet; use the preview link to open the sample dashboard.
+- The dashboard at `/main` shows static sample metrics. It does not request
+  location permission or record runs.
+- The five bottom tabs use Expo Router's tab navigator: home, run history,
+  statistics, social feed, and profile. Switching tabs does not add a back-stack
+  entry. App settings and run details are pushed as sub-screens with a back
+  affordance; top-level tabs do not need one.
+- Tab titles remain fixed while the screen content scrolls.
+- Social feed reactions and settings controls only update the preview UI; they
+  are not persisted or synced.
+- Social post composition can select up to four photos and requires an
+  audience choice for each post. Selected images are preview-only until media
+  upload and post APIs are connected.
+- Backend API contracts and open integration decisions are documented in
+  [docs/API_REQUIREMENTS.md](./docs/API_REQUIREMENTS.md).
 - Each fresh app launch shows an animated logo, tagline, and orbit splash before
   onboarding. Reduced motion replaces the animation with a short static splash.
 - On phones, illustration size adapts to the measured space left after the header,

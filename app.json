@@ -33,6 +33,14 @@
           "imageWidth": 88
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "PACE에서 러닝 게시물에 사진을 추가하기 위해 사진 라이브러리에 접근합니다.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
       "expo-asset"
     ],
     "experiments": {
