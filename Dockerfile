@@ -1,5 +1,5 @@
 # --- 1단계: 빌드 스테이지 (Node.js 환경에서 Expo 웹 빌드) ---
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
