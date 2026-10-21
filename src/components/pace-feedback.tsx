@@ -54,7 +54,7 @@ export function PaceLoadingState({ label = '불러오는 중' }: PaceLoadingStat
       accessibilityRole="progressbar"
       accessibilityLabel={label}
       style={styles.loading}>
-      <Animated.View style={logoStyle}>
+      <Animated.View style={[styles.loadingLogo, logoStyle]}>
         <PaceBrand />
       </Animated.View>
       <Text style={styles.loadingLabel}>{label}</Text>
@@ -124,6 +124,7 @@ export function PaceErrorDialog({
 
 const styles = StyleSheet.create({
   loading: { gap: 13 },
+  loadingLogo: { alignSelf: 'center' },
   loadingLabel: { color: C.muted, fontSize: 11, textAlign: 'center' },
   skeletonCard: {
     marginTop: 3,

@@ -1,3 +1,5 @@
+import type { CrewRegion } from '@/features/crew/regions';
+
 export type CrewPeriod = 'week' | 'month';
 
 export type CrewMembership = 'leader' | 'member' | 'pending' | 'none';
@@ -6,10 +8,29 @@ export type CrewMembership = 'leader' | 'member' | 'pending' | 'none';
 export type CrewRankingItem = {
   id: string;
   name: string;
+  region: CrewRegion | null;
   rank: number;
   memberCount: number;
   distanceMeters: number;
   isMine: boolean;
+};
+
+/** One row of crew search (GET /crews?query=&sido=&sigungu=). Distance is this week's total. */
+export type CrewSearchItem = {
+  id: string;
+  name: string;
+  intro: string;
+  region: CrewRegion | null;
+  memberCount: number;
+  maxMembers: number;
+  weekDistanceMeters: number;
+  isMine: boolean;
+};
+
+export type CrewSearchParams = {
+  query?: string;
+  sido?: string | null;
+  sigungu?: string | null;
 };
 
 export type CrewMemberStat = {
@@ -26,6 +47,7 @@ export type CrewDetail = {
   id: string;
   name: string;
   intro: string;
+  region: CrewRegion | null;
   leaderNickname: string;
   memberCount: number;
   maxMembers: number;
@@ -43,6 +65,7 @@ export type CrewDetail = {
 export type CreateCrewInput = {
   name: string;
   intro: string;
+  region: CrewRegion | null;
 };
 
 export const CREW_MAX_MEMBERS = 50;

@@ -10,22 +10,29 @@ import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { createCrew } from '@/data/crew-repository';
 
+import { LocateRegionButton, RegionPicker, type RegionSelection } from './region-picker';
 import { CREW_INTRO_MAX_LENGTH, CREW_MAX_MEMBERS, CREW_NAME_MAX_LENGTH } from './types';
 
 export function CrewCreateScreen() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [intro, setIntro] = useState('');
+  const [region, setRegion] = useState<RegionSelection>({ sido: null, sigungu: null });
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   const trimmedName = name.trim();
-  const canSubmit = trimmedName.length >= 2;
+  const canSubmit = trimmedName.length >= 2 && region.sido !== null;
 
   const submit = async () => {
     setSaving(true);
     try {
-      const crewId = await createCrew({ name: trimmedName, intro });
+      const crewId = await createCrew({
+        name: trimmedName,
+        intro,
+        region: region.sido ? { sido: region.sido, sigungu: region.sigungu } : null,
+      });
       router.replace({ pathname: '/crew-detail', params: { crewId } });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '크루를 만들지 못했어요.');
@@ -68,6 +75,13 @@ export function CrewCreateScreen() {
             />
           </Field>
 
+          <Field
+            label="활동 지역"
+            accessory={<LocateRegionButton onLocated={setRegion} onError={setLocationError} />}
+            caption="크루 찾기에서 지역으로 검색돼요. 정확한 위치는 저장하지 않아요.">
+            <RegionPicker value={region} onChange={setRegion} allSigunguLabel="시/도 전체" />
+          </Field>
+
           <View style={styles.rules}>
             <Text style={styles.rule}>· 크루는 한 사람당 하나만 가입할 수 있어요.</Text>
             <Text style={styles.rule}>· 최대 {CREW_MAX_MEMBERS}명까지 함께할 수 있어요.</Text>
@@ -84,18 +98,26 @@ export function CrewCreateScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
       <PaceErrorDialog message={errorMessage} onClose={() => setErrorMessage(null)} title="크루를 만들 수 없어요" />
+      <PaceErrorDialog message={locationError} onClose={() => setLocationError(null)} title="지역을 찾지 못했어요" />
     </SafeAreaView>
   );
 }
 
-function Field({ label, count, children }: Readonly<{ label: string; count: string; children: ReactNode }>) {
+function Field({
+  label,
+  count,
+  accessory,
+  caption,
+  children,
+}: Readonly<{ label: string; count?: string; accessory?: ReactNode; caption?: string; children: ReactNode }>) {
   return (
     <View style={styles.field}>
       <View style={styles.fieldHeader}>
         <Text style={styles.fieldLabel}>{label}</Text>
-        <Text style={styles.fieldCount}>{count}</Text>
+        {accessory ?? (count ? <Text style={styles.fieldCount}>{count}</Text> : null)}
       </View>
       {children}
+      {caption ? <Text style={styles.fieldCaption}>{caption}</Text> : null}
     </View>
   );
 }
@@ -108,9 +130,10 @@ const styles = StyleSheet.create({
   title: { marginTop: 8, color: C.text, fontSize: 25, fontWeight: '700', letterSpacing: -0.6 },
   description: { marginTop: 6, color: C.muted, fontSize: 12, lineHeight: 18 },
   field: { marginTop: 24 },
-  fieldHeader: { marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between' },
+  fieldHeader: { marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   fieldLabel: { color: C.text, fontSize: 13, fontWeight: '600' },
   fieldCount: { color: C.subtle, fontSize: 11 },
+  fieldCaption: { marginTop: 8, color: C.subtle, fontSize: 11, lineHeight: 16 },
   input: {
     minHeight: 50,
     paddingHorizontal: 15,

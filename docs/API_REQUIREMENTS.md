@@ -5,7 +5,7 @@ PACE 앱(Expo/React Native)이 필요로 하는 백엔드 API, DB 테이블, 구
 
 - 대상: Spring Boot 3.x (Java 21), Spring Security + JWT, Spring Data JPA
 - DB: **PostgreSQL 16 기준**으로 작성 (MySQL 8 사용 시 차이는 [부록 B](#부록-b-mysql-8-사용-시-차이))
-- 상태: 초안 v3 (소셜 피드 → 크루·대결로 변경). 경로·필드명은 구현하면서 확정합니다. 확정되면 앱의 `src/data/*` 저장소
+- 상태: 초안 v3.1 (소셜 피드 → 크루·대결, 크루 활동 지역·크루/대결 찾기 추가). 경로·필드명은 구현하면서 확정합니다. 확정되면 앱의 `src/data/*` 저장소
   함수 내부만 API 호출로 교체합니다.
 
 ---
@@ -221,6 +221,8 @@ CREATE TABLE crews (
   public_id         CHAR(26)     NOT NULL UNIQUE,
   name              VARCHAR(20)  NOT NULL,
   intro             VARCHAR(100),
+  region_sido       VARCHAR(20)  NOT NULL,             -- 활동 지역 시/도 (앱 regions.ts 목록과 같은 문자열, 예: '서울', '경기')
+  region_sigungu    VARCHAR(30),                       -- 시/군/구 (예: '영등포구', '수원시'). NULL = 시/도 전체, 세종은 항상 NULL
   image_media_id    BIGINT       REFERENCES media_assets(id) ON DELETE SET NULL,
   leader_id         BIGINT       NOT NULL REFERENCES users(id),
   invite_code       VARCHAR(12)  NOT NULL UNIQUE,      -- 크루장이 재발급하면 교체 (이전 코드 즉시 무효)
@@ -232,6 +234,9 @@ CREATE TABLE crews (
   disbanded_at      TIMESTAMPTZ
 );
 CREATE UNIQUE INDEX uq_crews_name_active ON crews (lower(name)) WHERE status = 'active';
+CREATE INDEX idx_crews_region ON crews (region_sido, region_sigungu) WHERE status = 'active';
+-- 이름 부분 검색용 (pg_trgm): CREATE EXTENSION pg_trgm;
+CREATE INDEX idx_crews_name_trgm ON crews USING gin (lower(name) gin_trgm_ops) WHERE status = 'active';
 
 -- PK 가 user_id → "한 사람은 크루 하나만" 을 DB가 보장
 CREATE TABLE crew_members (
@@ -691,6 +696,9 @@ GROUP BY day;
 - 기간: `week` = Asia/Seoul 월요일 00:00 ~ 다음 월요일 00:00, `month` = 매월 1일 00:00 ~.
 - 정원 50명(`CREW_MAX_MEMBERS`), 이름 1~20자(활성 크루 중 중복 불가), 소개 ≤100자.
 - 크루장은 다른 멤버가 남아 있으면 탈퇴 불가 → 위임 후 탈퇴, 혼자면 탈퇴 = 해체.
+- **활동 지역** = 시/도(필수) + 시/군/구(선택). 목록에서 고르는 값이고 **GPS 좌표는 저장하지 않음**.
+  앱의 "내 위치로" 버튼은 기기에서 역지오코딩한 주소를 목록 값으로 바꿔 채울 뿐, 좌표를 서버에 보내지 않음.
+  허용 값은 앱 `src/features/crew/regions.ts` 와 같은 목록(서버 enum/테이블로 관리, 잘못된 값 `400 INVALID_REGION`).
 
 #### 🔒 `GET /crews/rankings?period=week|month&cursor=&limit=20` — 크루 랭킹 (크루 탭)
 
@@ -703,7 +711,8 @@ GROUP BY day;
   "items": [
     {
       "rank": 1,
-      "crew": { "id": "01JD...", "name": "새벽 한강 러너스", "imageUrl": null },
+      "crew": { "id": "01JD...", "name": "새벽 한강 러너스", "imageUrl": null,
+                "region": { "sido": "서울", "sigungu": "영등포구" } },
       "memberCount": 12,
       "distanceMeters": 184200,
       "isMine": true
@@ -733,6 +742,46 @@ GROUP BY cm.crew_id;
 > `DELETE /runs`·restore 시 반대로 증감. **탈퇴한 멤버의 이번 기간 거리는 크루 합계에서 뺌**(확정) —
 > 탈퇴 트랜잭션에서 해당 멤버의 이번 주·이번 달 거리만큼 `crew_period_stats` 차감 (배치 재계산 결과와 일치).
 
+#### 🔒 `GET /crews?query=&sido=&sigungu=&cursor=&limit=20` — 크루 찾기 (크루 찾기 화면)
+
+- `query`: 이름·소개 부분 일치(대소문자 무시, 공백 제거 후 1자 이상일 때만 적용). 비우면 전체.
+- `sido`/`sigungu`: 활동 지역 정확히 일치. `sido`만 주면 그 시/도 전체(시/군/구 NULL 크루 포함).
+- `status = active` 만. 정렬: **이번 주 거리 DESC**, `member_count DESC`, `id ASC` (커서는 이 세 값으로).
+
+```json
+// CrewSearchResponse
+{
+  "items": [
+    {
+      "id": "01JD...",
+      "name": "광교 호수런",
+      "intro": "광교호수공원 한 바퀴부터 시작해요",
+      "region": { "sido": "경기", "sigungu": "수원시" },
+      "imageUrl": null,
+      "memberCount": 12,
+      "maxMembers": 50,
+      "weekDistanceMeters": 104400,
+      "isMine": false,
+      "myMembership": "none"           // none | pending | member | leader
+    }
+  ],
+  "nextCursor": null
+}
+```
+
+```sql
+SELECT c.*, COALESCE(s.distance_meters, 0) AS week_distance
+FROM crews c
+LEFT JOIN crew_period_stats s
+  ON s.crew_id = c.id AND s.period = 'week' AND s.period_start = :thisMonday
+WHERE c.status = 'active'
+  AND (:query IS NULL OR lower(c.name) LIKE '%' || lower(:query) || '%' OR lower(c.intro) LIKE '%' || lower(:query) || '%')
+  AND (:sido IS NULL OR c.region_sido = :sido)
+  AND (:sigungu IS NULL OR c.region_sigungu = :sigungu)
+ORDER BY week_distance DESC, c.member_count DESC, c.id
+LIMIT :limit;
+```
+
 #### 🔒 `GET /users/me/crew` — 내 크루
 
 `200 { "crewId": "01JD...", "role": "leader", "joinedAt": "..." }` 또는 `200 null`.
@@ -746,6 +795,7 @@ GROUP BY cm.crew_id;
   "id": "01JD...",
   "name": "새벽 한강 러너스",
   "intro": "평일 새벽 6시 한강에서 같이 달려요",
+  "region": { "sido": "서울", "sigungu": "영등포구" },
   "imageUrl": null,
   "leader": { "id": "01JA...", "nickname": "지수" },
   "memberCount": 12,
@@ -778,9 +828,8 @@ GROUP BY cm.crew_id;
 
 | Method | Path | 설명 |
 | --- | --- | --- |
-| 🔒 POST | `/crews` | 생성 `{ "name", "intro", "imageMediaId"? }` → `201 CrewDetailResponse`. 생성자는 leader, 초대 코드 자동 발급 |
-| 🔒 GET | `/crews?query=한강&cursor=` | 이름 검색(2자 이상, `active`만) — 가입 신청할 크루 찾기 |
-| 🔒 PATCH | `/crews/{crewId}` | 크루장만. 이름·소개·이미지 수정 |
+| 🔒 POST | `/crews` | 생성 `{ "name", "intro", "region": { "sido", "sigungu"? }, "imageMediaId"? }` → `201 CrewDetailResponse`. 생성자는 leader, 초대 코드 자동 발급 |
+| 🔒 PATCH | `/crews/{crewId}` | 크루장만. 이름·소개·활동 지역·이미지 수정 |
 | 🔒 DELETE | `/crews/{crewId}` | 크루장만, 본인 혼자일 때 해체 (`status = disbanded`) |
 | 🔒 POST | `/crews/{crewId}/invite-code` | 크루장만. 초대 코드 재발급 → `{ "inviteCode": "K3J9QX" }` |
 | 🔒 PUT | `/crews/{crewId}/leader` | 크루장 위임 `{ "userId" }` (대상은 멤버여야 함) |
@@ -825,7 +874,21 @@ recruiting ──(마감 시각, 인원 ≥ min)──▶ confirmed ──(start
 #### 🔒 `GET /races?scope=open|mine&cursor=&limit=20` — 대결 목록 (대결 탭)
 
 - `open`: `status = recruiting AND visibility = public AND join_deadline_at > now()`, 출발 임박 순. 내가 참가한 대결 제외.
+  대결 탭 홈은 `limit=3` 으로 미리보기만 보여 주고, 전체는 대결 찾기 화면에서 조회.
 - `mine`: 내가 방장이거나 참가한 대결. 다가오는 것(출발 오름차순) → 지난 것(최신순).
+
+#### 🔒 `GET /races?scope=search&distance=&from=&to=&hideFull=&cursor=&limit=20` — 대결 찾기
+
+대결은 **원격 레이스라 위치 조건이 없음**. 거리·시작 시간으로만 찾음.
+
+- 대상: `open` 과 같은 조건(공개·모집 중·마감 전)이지만 **내가 참가한 대결도 포함**(`isJoined: true` 로 표시).
+- `distance`: `3000 | 5000 | 10000 | 21097`, 생략 시 전체.
+- `from`/`to`: 출발 시각 범위(ISO-8601, `from` 포함·`to` 미포함). **앱이 기기 시간대로 계산해서 보냄**
+  (`곧 시작` = 지금~3시간, `오늘`, `내일`, `주말` = 이번 토 00:00~월 00:00 — `race-status.ts getRaceWindowRange`).
+  생략 시 `from = now`, `to` 제한 없음.
+- `hideFull=true`: `participant_count < max_participants` 만 (내가 참가한 대결은 예외로 표시).
+- 정렬: `starts_at ASC, id ASC`. 응답 `{ "items": RaceSummary[], "nextCursor" }`.
+- 인덱스: 기존 `idx_races_open (starts_at)` 로 충분 (모집 중 공개 대결 수가 적음).
 
 ```json
 // RaceSummary
@@ -1048,8 +1111,8 @@ DB 마이그레이션은 Flyway `V1__init.sql` 에 3장의 DDL을 그대로 사�
 | --- | --- | --- |
 | **1. MVP** | Auth(Apple·Kakao·Google) + `GET/PATCH /users/me` + settings + `POST/GET/DELETE /runs` + `/runs/{id}` | 로그인 실제 동작, 기록·목표 서버 저장, 기기 기록 업로드 |
 | 2. 집계 | `/dashboard`, `/stats/running` | 홈·통계를 서버 집계로 (기기 계산은 오프라인 fallback) |
-| 3. 크루 | crews, 가입(코드·신청/승인), 탈퇴, `crew_period_stats` + 랭킹 | 크루 탭 목업 제거 (`crew-repository.ts` 교체) |
-| 4. 대결 | races, 참가/취소, 스케줄러(마감 판정·live·확정), 결과 제출 | 대결 탭 목업 제거 + 출발 시 자동 러닝 연결 |
+| 3. 크루 | crews(활동 지역 포함), 크루 찾기, 가입(코드·신청/승인), 탈퇴, `crew_period_stats` + 랭킹 | 크루 탭 목업 제거 (`crew-repository.ts` 교체) |
+| 4. 대결 | races, 대결 찾기, 참가/취소, 스케줄러(마감 판정·live·확정), 결과 제출 | 대결 탭 목업 제거 + 출발 시 자동 러닝 연결 |
 | 5. 알림 | push token, 대결 알림(확정·취소·출발 1분 전·결과), 크루 신청 알림, 리마인더 | 설정 토글 실제 동작 |
 | 6. 탈퇴 | `DELETE /users/me` + 삭제 배치 | **App Store 제출 전 필수**(계정 생성이 있는 앱은 앱 내 탈퇴 필수) |
 
@@ -1068,8 +1131,10 @@ DB 마이그레이션은 Flyway `V1__init.sql` 에 3장의 DDL을 그대로 사�
 | 통계 (`features/stats/stats-screen.tsx`) | `GET /stats/running` |
 | 크루 탭 · 크루 (`features/crew/crew-section.tsx`) | `GET /crews/rankings?period=`, `GET /users/me/crew`, `POST /crews/join-by-code` |
 | 크루 탭 · 대결 (`features/race/race-section.tsx`) | `GET /races?scope=mine`, `GET /races?scope=open`, `POST /races/join-by-code` |
-| 크루 만들기 (`features/crew/crew-create-screen.tsx`) | `POST /crews` (+ `/media/*` 이미지 추후) |
+| 크루 찾기 (`features/crew/crew-search-screen.tsx`) | `GET /crews?query=&sido=&sigungu=` (지역은 기기 역지오코딩, 서버에 좌표 안 보냄) |
+| 크루 만들기 (`features/crew/crew-create-screen.tsx`) | `POST /crews` (활동 지역 포함, `/media/*` 이미지 추후) |
 | 크루 상세 (`features/crew/crew-detail-screen.tsx`) | `GET /crews/{id}?period=`, `GET /crews/{id}/members/stats`, join-requests, `DELETE /crews/{id}/members/me`, `POST /crews/{id}/invite-code` |
+| 대결 찾기 (`features/race/race-search-screen.tsx`) | `GET /races?scope=search&distance=&from=&to=&hideFull=` |
 | 대결 만들기 (`features/race/race-create-screen.tsx`) | `POST /races` |
 | 대결 상세 (`features/race/race-detail-screen.tsx`) | `GET /races/{id}`, `POST/DELETE /races/{id}/participants`, `POST /races/{id}/cancel`, `GET /races/{id}/results` |
 | 대결 러닝 (추후, `run-tracking-screen.tsx` 재사용) | 종료 시 `POST /runs` → `POST /races/{id}/result` |
@@ -1092,6 +1157,8 @@ DB 마이그레이션은 Flyway `V1__init.sql` 에 3장의 DDL을 그대로 사�
 | 크루 재가입 제한 | 자진 탈퇴 후 **24시간** 다른 크루 가입·생성 불가 (강퇴·해체는 제외) | `crew_membership_history`, 앱 `CREW_REJOIN_COOLDOWN_HOURS` |
 | 랭킹 기간 경계 | **Asia/Seoul 고정** — 주간 월요일 00:00, 월간 1일 00:00 | §4.7 |
 | 탈퇴 멤버 거리 | 이번 기간 크루 합계에서 **뺌** | §4.7 랭킹 캐시 |
+| 크루 위치 | **활동 지역(시/도 + 시/군/구) 선택**, GPS 좌표 저장 안 함. 크루 찾기는 이름·지역 필터 | `crews.region_*`, §4.7 크루 찾기 |
+| 대결 위치 | **위치 조건 없음**(원격 레이스). 대결 찾기는 거리·시작 시간·정원 필터 | §4.8 대결 찾기 |
 | 비멤버 공개 범위 | 크루 정보·순위·총거리 + 멤버 닉네임·거리 공개. 비공개 프로필은 "러너"로 가림 | §4.7 멤버 거리 |
 
 ### 8.2 아직 미정

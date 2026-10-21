@@ -5,6 +5,7 @@ import { InviteCodeForm } from '@/components/invite-code-form';
 import { PaceButton } from '@/components/pace-button';
 import { PaceLoadingState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
+import { SearchEntry } from '@/components/search-entry';
 import { PaceColors as C } from '@/constants/pace';
 import { joinRaceByCode, listMyRaces, listOpenRaces } from '@/data/race-repository';
 import { tabScreenStyles as shared } from '@/features/navigation/tab-screen-shell';
@@ -21,6 +22,8 @@ async function loadRaceHome(): Promise<RaceHome> {
   const [mine, open] = await Promise.all([listMyRaces(), listOpenRaces()]);
   return { mine, open };
 }
+
+const OPEN_PREVIEW_COUNT = 3;
 
 const EMPTY: RaceHome = { mine: [], open: [] };
 
@@ -71,10 +74,25 @@ export function RaceSection() {
       ) : null}
 
       <SectionHeader title="참가할 수 있는 대결" caption="공개 방 · 시작 시간 순" />
+      <SearchEntry
+        label="거리·시간으로 대결 찾기"
+        onPress={() => router.push('/race-search')}
+        style={styles.searchEntry}
+      />
       {data.open.length > 0 ? (
-        data.open.map((race) => (
-          <RaceCard key={race.id} race={race} now={now} onPress={() => openRace(race.id)} />
-        ))
+        <>
+          {data.open.slice(0, OPEN_PREVIEW_COUNT).map((race) => (
+            <RaceCard key={race.id} race={race} now={now} onPress={() => openRace(race.id)} />
+          ))}
+          {data.open.length > OPEN_PREVIEW_COUNT ? (
+            <PaceButton
+              label={`모집 중인 대결 ${data.open.length}개 모두 보기`}
+              variant="secondary"
+              onPress={() => router.push('/race-search')}
+              style={styles.moreButton}
+            />
+          ) : null}
+        </>
       ) : (
         <View style={shared.card}>
           <Text style={shared.muted}>지금 모집 중인 공개 대결이 없어요. 직접 방을 만들어 보세요.</Text>
@@ -108,6 +126,8 @@ const styles = StyleSheet.create({
   howBody: { marginTop: 7 },
   createButton: { marginTop: 16 },
   orLabel: { marginTop: 18, marginBottom: 8, color: C.muted, fontSize: 11, fontWeight: '600' },
+  searchEntry: { marginTop: 12 },
+  moreButton: { marginTop: 12 },
   sectionHeader: { marginTop: 26, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   sectionTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
   sectionCaption: { color: C.subtle, fontSize: 10 },

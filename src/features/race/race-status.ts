@@ -1,5 +1,7 @@
 import {
+  RACE_SOON_WINDOW_HOURS,
   RACE_TIME_LIMIT_MINUTES_PER_KM,
+  type RaceTimeWindow,
   type RaceStatus,
   type RaceSummary,
 } from './types';
@@ -73,4 +75,29 @@ export function formatRaceDistance(distanceMeters: number): string {
   if (distanceMeters === 21097) return '하프';
   const km = distanceMeters / 1000;
   return `${Number.isInteger(km) ? km : km.toFixed(1)}km`;
+}
+
+function startOfDay(ms: number, addDays = 0): number {
+  const date = new Date(ms);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + addDays).getTime();
+}
+
+/** [from, to) for a search window, in the device's local time. Sent to the server as `from`/`to`. */
+export function getRaceWindowRange(window: RaceTimeWindow, now = Date.now()): { from: number; to: number | null } {
+  switch (window) {
+    case 'all':
+      return { from: now, to: null };
+    case 'soon':
+      return { from: now, to: now + RACE_SOON_WINDOW_HOURS * 60 * MINUTE_MS };
+    case 'today':
+      return { from: now, to: startOfDay(now, 1) };
+    case 'tomorrow':
+      return { from: startOfDay(now, 1), to: startOfDay(now, 2) };
+    case 'weekend': {
+      const day = new Date(now).getDay(); // 0 = Sun, 6 = Sat
+      if (day === 0) return { from: now, to: startOfDay(now, 1) };
+      const saturday = startOfDay(now, 6 - day);
+      return { from: Math.max(now, saturday), to: saturday + 2 * 86_400_000 };
+    }
+  }
 }

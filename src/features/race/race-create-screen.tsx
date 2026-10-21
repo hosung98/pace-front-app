@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackHeader } from '@/components/back-header';
+import { ChoiceChips } from '@/components/choice-chips';
 import { PaceButton } from '@/components/pace-button';
 import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
@@ -105,7 +106,7 @@ export function RaceCreateScreen() {
           </Section>
 
           <Section label="거리">
-            <ChipRow
+            <ChoiceChips
               options={RACE_DISTANCE_OPTIONS_METERS.map((value) => ({ value, label: formatRaceDistance(value) }))}
               value={distanceMeters}
               onChange={setDistanceMeters}
@@ -113,7 +114,7 @@ export function RaceCreateScreen() {
           </Section>
 
           <Section label="시작 시간">
-            <ChipRow
+            <ChoiceChips
               options={DAY_OPTIONS.map((label, value) => ({ value, label }))}
               value={dayOffset}
               onChange={setDayOffset}
@@ -136,7 +137,7 @@ export function RaceCreateScreen() {
           </Section>
 
           <Section label="모집 마감" caption="마감 시점에 최소 인원이 안 되면 자동으로 취소돼요.">
-            <ChipRow
+            <ChoiceChips
               options={RACE_DEADLINE_OPTIONS_MINUTES.map((value) => ({ value, label: `${value}분 전` }))}
               value={deadlineMinutes}
               onChange={setDeadlineMinutes}
@@ -165,7 +166,7 @@ export function RaceCreateScreen() {
           <Section
             label="공개 범위"
             caption={visibility === 'public' ? '대결 목록에 보이고 누구나 참가할 수 있어요.' : '초대 코드를 받은 사람만 참가할 수 있어요.'}>
-            <ChipRow
+            <ChoiceChips
               options={[
                 { value: 'public' as const, label: '공개' },
                 { value: 'private' as const, label: '비공개 (코드)' },
@@ -209,30 +210,6 @@ function Section({ label, caption, children }: Readonly<{ label: string; caption
       <Text style={styles.sectionLabel}>{label}</Text>
       {children}
       {caption ? <Text style={styles.sectionCaption}>{caption}</Text> : null}
-    </View>
-  );
-}
-
-function ChipRow<T extends string | number>({
-  options,
-  value,
-  onChange,
-}: Readonly<{ options: { value: T; label: string }[]; value: T; onChange: (value: T) => void }>) {
-  return (
-    <View style={styles.chips}>
-      {options.map((option) => {
-        const selected = option.value === value;
-        return (
-          <Pressable
-            key={String(option.value)}
-            accessibilityRole="radio"
-            accessibilityState={{ selected }}
-            onPress={() => onChange(option.value)}
-            style={[styles.chip, selected && styles.chipActive]}>
-            <Text style={[styles.chipText, selected && styles.chipTextActive]}>{option.label}</Text>
-          </Pressable>
-        );
-      })}
     </View>
   );
 }
@@ -295,11 +272,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Pretendard-Regular',
     fontSize: 15,
   },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { minHeight: 40, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
-  chipActive: { backgroundColor: C.accent, borderColor: C.accent },
-  chipText: { color: C.muted, fontSize: 13, fontWeight: '600' },
-  chipTextActive: { color: C.accentInk },
   stepperCard: { marginTop: 10, padding: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 16, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   clock: { color: C.text, fontSize: 24, fontWeight: '700', letterSpacing: -0.5 },
   stepButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: C.raised },

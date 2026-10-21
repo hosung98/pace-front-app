@@ -27,9 +27,14 @@ are not connected to a backend.
 - Tab titles remain fixed while the screen content scrolls.
 - The crew tab has two segments. **Crew** shows weekly/monthly crew distance
   rankings, crew detail (member distances, invite code), create, join by invite
-  code or request, and leave (one crew per user). **Race** lists open and joined
-  remote races (same start time, ranked by time to the target distance), with
-  create, join/leave, join by code, host cancel, a start countdown, and results.
+  code or request, and leave (one crew per user). Crews have an activity region
+  (시/도 + 시/군/구, picked from a list — no GPS coordinates are stored), and
+  **크루 찾기** searches by name and region ("내 위치로" reverse-geocodes on the
+  device; iOS/Android only). **Race** lists open and joined remote races (same
+  start time, ranked by time to the target distance), with create, join/leave,
+  join by code, host cancel, a start countdown, and results. **대결 찾기**
+  filters open races by distance, start window, and full rooms (races have no
+  location).
   All crew/race data is in-memory sample data (`src/data/crew-repository.ts`,
   `src/data/race-repository.ts`) and resets when the app restarts.
 - Settings controls only update the preview UI; they are not persisted or synced.

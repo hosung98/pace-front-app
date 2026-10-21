@@ -6,6 +6,7 @@ import { InviteCodeForm } from '@/components/invite-code-form';
 import { PaceButton } from '@/components/pace-button';
 import { PaceLoadingState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
+import { SearchEntry } from '@/components/search-entry';
 import { SegmentedControl } from '@/components/segmented-control';
 import { PaceColors as C } from '@/constants/pace';
 import { getCrewRankings, getMyCrewId, joinCrewByCode } from '@/data/crew-repository';
@@ -13,6 +14,7 @@ import { tabScreenStyles as shared } from '@/features/navigation/tab-screen-shel
 import { useFocusQuery } from '@/hooks/use-focus-query';
 import { formatKm } from '@/lib/format';
 
+import { formatRegion } from './regions';
 import type { CrewPeriod, CrewRankingItem } from './types';
 
 type CrewHome = {
@@ -62,6 +64,7 @@ export function CrewSection() {
             <Text style={styles.chevron}>›</Text>
           </View>
           <Text style={styles.myCrewName}>{myCrew.name}</Text>
+          <Text style={styles.myCrewRegion}>{formatRegion(myCrew.region)}</Text>
           <View style={styles.myCrewStats}>
             <View>
               <Text style={styles.myCrewRank}>{myCrew.rank}<Text style={styles.myCrewUnit}>위</Text></Text>
@@ -83,7 +86,7 @@ export function CrewSection() {
         <View style={shared.card}>
           <Text style={shared.cardTitle}>아직 가입한 크루가 없어요</Text>
           <Text style={[shared.muted, styles.cardBody]}>
-            크루를 만들거나 초대 코드로 참가해 보세요. 크루는 하나만 가입할 수 있어요.
+            우리 동네 크루를 찾아 가입하거나 직접 만들어 보세요. 크루는 하나만 가입할 수 있어요.
           </Text>
           <PaceButton label="크루 만들기" onPress={() => router.push('/crew-create')} style={styles.createButton} />
           <Text style={styles.orLabel}>초대 코드가 있나요?</Text>
@@ -96,6 +99,12 @@ export function CrewSection() {
           />
         </View>
       ) : null}
+
+      <SearchEntry
+        label="크루 이름이나 지역으로 찾기"
+        onPress={() => router.push('/crew-search')}
+        style={styles.searchEntry}
+      />
 
       <View style={styles.rankingHeader}>
         <Text style={styles.sectionTitle}>크루 랭킹</Text>
@@ -122,6 +131,7 @@ export function CrewSection() {
                 <Text style={styles.rankName} numberOfLines={1}>{crew.name}</Text>
                 {crew.isMine ? <Text style={styles.mineTag}>내 크루</Text> : null}
               </View>
+              <Text style={styles.rankRegion} numberOfLines={1}>{formatRegion(crew.region)}</Text>
               <View style={styles.rankBarTrack}>
                 <View style={[styles.rankBarFill, { width: `${(crew.distanceMeters / topDistance) * 100}%` }]} />
               </View>
@@ -149,6 +159,7 @@ const styles = StyleSheet.create({
   myCrewEyebrow: { color: C.accentInk, fontSize: 9, fontWeight: '700', letterSpacing: 2, opacity: 0.7 },
   chevron: { color: C.accentInk, fontSize: 24, lineHeight: 24 },
   myCrewName: { marginTop: 6, color: C.accentInk, fontSize: 21, fontWeight: '700', letterSpacing: -0.4 },
+  myCrewRegion: { marginTop: 2, color: C.accentInk, fontSize: 11, opacity: 0.7 },
   myCrewStats: { marginTop: 18, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   myCrewRank: { color: C.accentInk, fontSize: 32, fontWeight: '700', letterSpacing: -1 },
   myCrewUnit: { color: C.accentInk, fontSize: 15, fontWeight: '700' },
@@ -159,6 +170,7 @@ const styles = StyleSheet.create({
   cardBody: { marginTop: 6 },
   createButton: { marginTop: 16 },
   orLabel: { marginTop: 18, marginBottom: 8, color: C.muted, fontSize: 11, fontWeight: '600' },
+  searchEntry: { marginTop: 14 },
   rankingHeader: { marginTop: 26, marginBottom: 10, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   sectionTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
   sectionCaption: { color: C.subtle, fontSize: 10 },
@@ -168,7 +180,8 @@ const styles = StyleSheet.create({
   rankRowMine: { backgroundColor: '#1C2117' },
   rankNumber: { width: 20, color: C.subtle, fontSize: 15, fontWeight: '700', textAlign: 'center' },
   rankTop: { color: C.accent },
-  rankBody: { flex: 1, gap: 7 },
+  rankBody: { flex: 1, gap: 5 },
+  rankRegion: { marginTop: -2, color: C.subtle, fontSize: 10 },
   rankNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   rankName: { flexShrink: 1, color: C.text, fontSize: 13, fontWeight: '600' },
   mineTag: { color: C.accent, fontSize: 9, fontWeight: '700' },

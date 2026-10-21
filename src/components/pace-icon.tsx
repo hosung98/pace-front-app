@@ -1,6 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 
-type PaceIconName = 'run' | 'stats' | 'home' | 'crew' | 'profile';
+type PaceIconName = 'run' | 'stats' | 'home' | 'crew' | 'profile' | 'search';
 
 type PaceIconProps = Readonly<{
   name: PaceIconName;
@@ -58,6 +58,13 @@ export function PaceIcon({ name, color, size = 22 }: PaceIconProps) {
           <View style={[styles.profileShoulders, line, { width: 16 * scale, height: 9 * scale, bottom: 1 * scale, left: 3 * scale, borderTopLeftRadius: 9 * scale, borderTopRightRadius: 9 * scale }]} />
         </View>
       );
+    case 'search':
+      return (
+        <View accessible={false} style={{ width: size, height: size }}>
+          <View style={[styles.lens, { width: 13 * scale, height: 13 * scale, top: 2 * scale, left: 2 * scale, borderRadius: size, borderColor: color, borderWidth: 2 * scale }]} />
+          <View style={[styles.handle, line, { width: 2.4 * scale, height: 7 * scale, top: 12.5 * scale, left: 15 * scale }]} />
+        </View>
+      );
   }
 }
 
@@ -74,4 +81,6 @@ const styles = StyleSheet.create({
   personHead: { position: 'absolute' },
   personShoulder: { position: 'absolute' },
   profileShoulders: { position: 'absolute' },
+  lens: { position: 'absolute' },
+  handle: { position: 'absolute', borderRadius: 2, transform: [{ rotate: '-45deg' }] },
 });

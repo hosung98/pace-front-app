@@ -61,6 +61,19 @@ export type CreateRaceInput = {
   visibility: RaceVisibility;
 };
 
+/** Start-time windows for race search. The client turns these into `from`/`to` (device timezone). */
+export type RaceTimeWindow = 'all' | 'soon' | 'today' | 'tomorrow' | 'weekend';
+
+export type RaceSearchParams = {
+  /** null = any distance */
+  distanceMeters: number | null;
+  window: RaceTimeWindow;
+  hideFull: boolean;
+};
+
+/** "곧 시작" = starts within this many hours. */
+export const RACE_SOON_WINDOW_HOURS = 3;
+
 export const RACE_DISTANCE_OPTIONS_METERS = [3000, 5000, 10000, 21097] as const;
 export const RACE_DEADLINE_OPTIONS_MINUTES = [10, 30, 60] as const;
 export const RACE_MIN_PARTICIPANTS = 2;

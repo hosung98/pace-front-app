@@ -72,6 +72,10 @@ export function RaceCard({
         <View style={styles.badges}>
           {race.visibility === 'private' ? <Text style={styles.lock}>비공개</Text> : null}
           {race.isHost ? <Text style={styles.host}>방장</Text> : null}
+          {race.isJoined && !race.isHost ? <Text style={styles.host}>참가 중</Text> : null}
+          {!race.isJoined && status === 'recruiting' && race.participantCount >= race.maxParticipants ? (
+            <Text style={styles.lock}>정원 마감</Text>
+          ) : null}
           <RaceStatusBadge status={status} />
         </View>
       </View>

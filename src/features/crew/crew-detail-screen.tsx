@@ -18,6 +18,7 @@ import {
 } from '@/data/crew-repository';
 import { formatKm } from '@/lib/format';
 
+import { formatRegion } from './regions';
 import { CREW_REJOIN_COOLDOWN_HOURS, type CrewDetail, type CrewPeriod } from './types';
 
 const PERIOD_OPTIONS = [
@@ -99,7 +100,7 @@ export function CrewDetailScreen() {
         <Text style={styles.title}>{detail.name}</Text>
         {detail.intro ? <Text style={styles.intro}>{detail.intro}</Text> : null}
         <Text style={styles.meta}>
-          크루장 {detail.leaderNickname} · 멤버 {detail.memberCount}/{detail.maxMembers}명
+          {formatRegion(detail.region)} · 크루장 {detail.leaderNickname} · 멤버 {detail.memberCount}/{detail.maxMembers}명
         </Text>
 
         <SegmentedControl options={PERIOD_OPTIONS} value={period} onChange={setPeriod} style={styles.segment} />

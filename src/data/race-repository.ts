@@ -2,11 +2,12 @@
  * In-memory mock of the race API (docs/API_REQUIREMENTS.md §4.8).
  * Times are relative to app launch so every status (모집 중 / 확정 / 진행 중 / 종료) is visible in the preview.
  */
-import { canJoinRace, getRaceStatus } from '@/features/race/race-status';
+import { canJoinRace, getRaceStatus, getRaceWindowRange } from '@/features/race/race-status';
 import type {
   CreateRaceInput,
   RaceDetail,
   RaceParticipant,
+  RaceSearchParams,
   RaceSummary,
 } from '@/features/race/types';
 
@@ -27,11 +28,100 @@ function at(minutesFromLaunch: number): number {
   return Math.ceil((launchedAt + minutesFromLaunch * MINUTE) / tenMinutes) * tenMinutes;
 }
 
+/** This weekend's Saturday (+addDays) at `hour`:00 local time, or next week's if already past — keeps the 주말 filter populated. */
+function nextWeekendAt(hour: number, addDays = 0): number {
+  const now = new Date(launchedAt);
+  const day = now.getDay();
+  const toSaturday = day === 0 ? -1 : 6 - day;
+  const time = new Date(now.getFullYear(), now.getMonth(), now.getDate() + toSaturday + addDays, hour).getTime();
+  return time > launchedAt + 90 * MINUTE ? time : time + 7 * 86_400_000;
+}
+
+function crowd(count: number): MockRace['participants'] {
+  const names = ['하늘', '태오', '소율', '준서', '다은', '건우', '예린', '시우', '채원', '도윤', '라희', '지안'];
+  return Array.from({ length: count }, (_, index) => person(`u-crowd-${index}`, names[index % names.length]));
+}
+
 function person(userId: string, nickname: string): MockRace['participants'][number] {
   return { userId, nickname, result: null };
 }
 
 const races: MockRace[] = [
+  {
+    id: 'race-soon-3k',
+    title: '지금 바로 3km',
+    hostId: 'u-crowd-0',
+    hostNickname: '하늘',
+    distanceMeters: 3000,
+    startsAt: at(70),
+    joinDeadlineMinutes: 10,
+    minParticipants: 2,
+    maxParticipants: 6,
+    visibility: 'public',
+    cancelled: false,
+    inviteCode: null,
+    participants: crowd(3),
+  },
+  {
+    id: 'race-full-5k',
+    title: '퇴근길 5km (정원 마감)',
+    hostId: 'u-crowd-0',
+    hostNickname: '하늘',
+    distanceMeters: 5000,
+    startsAt: at(60 * 5),
+    joinDeadlineMinutes: 30,
+    minParticipants: 3,
+    maxParticipants: 4,
+    visibility: 'public',
+    cancelled: false,
+    inviteCode: null,
+    participants: crowd(4),
+  },
+  {
+    id: 'race-tomorrow-10k',
+    title: '내일 밤 10km 페이스 대결',
+    hostId: 'u-crowd-1',
+    hostNickname: '태오',
+    distanceMeters: 10000,
+    startsAt: at(60 * 26),
+    joinDeadlineMinutes: 60,
+    minParticipants: 3,
+    maxParticipants: 12,
+    visibility: 'public',
+    cancelled: false,
+    inviteCode: null,
+    participants: crowd(5),
+  },
+  {
+    id: 'race-weekend-half',
+    title: '주말 하프 완주 챌린지',
+    hostId: 'u-crowd-2',
+    hostNickname: '소율',
+    distanceMeters: 21097,
+    startsAt: nextWeekendAt(7),
+    joinDeadlineMinutes: 60,
+    minParticipants: 3,
+    maxParticipants: 20,
+    visibility: 'public',
+    cancelled: false,
+    inviteCode: null,
+    participants: crowd(6),
+  },
+  {
+    id: 'race-weekend-5k',
+    title: '일요일 저녁 5km',
+    hostId: 'u-crowd-3',
+    hostNickname: '준서',
+    distanceMeters: 5000,
+    startsAt: nextWeekendAt(19, 1),
+    joinDeadlineMinutes: 30,
+    minParticipants: 2,
+    maxParticipants: 10,
+    visibility: 'public',
+    cancelled: false,
+    inviteCode: null,
+    participants: crowd(2),
+  },
   {
     id: 'race-tonight-5k',
     title: '오늘 저녁 5km 한 판',
@@ -64,7 +154,7 @@ const races: MockRace[] = [
   },
   {
     id: 'race-weekend-10k',
-    title: '주말 10km 기록 경쟁',
+    title: '10km 기록 경쟁',
     hostId: 'u-seoyeon',
     hostNickname: '서연',
     distanceMeters: 10000,
@@ -163,6 +253,25 @@ export function listOpenRaces(): Promise<RaceSummary[]> {
       .filter((race) => race.visibility === 'public')
       .map(toSummary)
       .filter((race) => !race.isJoined && getRaceStatus(race, now) === 'recruiting')
+      .sort((a, b) => a.startsAt - b.startsAt),
+  );
+}
+
+/**
+ * GET /races?scope=open&distance=&from=&to=&hideFull= — race search.
+ * Public races still recruiting (joined ones included and marked), soonest first.
+ */
+export function searchRaces(params: RaceSearchParams): Promise<RaceSummary[]> {
+  const now = Date.now();
+  const { from, to } = getRaceWindowRange(params.window, now);
+  return wait(
+    races
+      .filter((race) => race.visibility === 'public')
+      .map(toSummary)
+      .filter((race) => getRaceStatus(race, now) === 'recruiting')
+      .filter((race) => params.distanceMeters === null || race.distanceMeters === params.distanceMeters)
+      .filter((race) => race.startsAt >= from && (to === null || race.startsAt < to))
+      .filter((race) => !params.hideFull || race.isJoined || race.participantCount < race.maxParticipants)
       .sort((a, b) => a.startsAt - b.startsAt),
   );
 }

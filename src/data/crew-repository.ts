@@ -11,7 +11,10 @@ import {
   type CrewMemberStat,
   type CrewPeriod,
   type CrewRankingItem,
+  type CrewSearchItem,
+  type CrewSearchParams,
 } from '@/features/crew/types';
+import type { CrewRegion } from '@/features/crew/regions';
 
 type MockMember = Omit<CrewMemberStat, 'distanceMeters' | 'runCount' | 'isMe'> & {
   week: [distanceMeters: number, runCount: number];
@@ -22,6 +25,7 @@ type MockCrew = {
   id: string;
   name: string;
   intro: string;
+  region: CrewRegion | null;
   inviteCode: string;
   maxMembers: number;
   members: MockMember[];
@@ -38,6 +42,7 @@ function sampleCrew(
   id: string,
   name: string,
   intro: string,
+  region: CrewRegion,
   inviteCode: string,
   memberCount: number,
   avgWeekMeters: number,
@@ -54,7 +59,7 @@ function sampleCrew(
       month: [Math.round(week * 3.9), weekRuns * 4],
     };
   });
-  return { id, name, intro, inviteCode, maxMembers: CREW_MAX_MEMBERS, members };
+  return { id, name, intro, region, inviteCode, maxMembers: CREW_MAX_MEMBERS, members };
 }
 
 const crews: MockCrew[] = [
@@ -62,6 +67,7 @@ const crews: MockCrew[] = [
     id: 'crew-hangang',
     name: '새벽 한강 러너스',
     intro: '평일 새벽 6시, 각자 동네에서 달리고 기록으로 만나요.',
+    region: { sido: '서울', sigungu: '영등포구' },
     inviteCode: 'HAN6AM',
     maxMembers: CREW_MAX_MEMBERS,
     members: [
@@ -73,10 +79,15 @@ const crews: MockCrew[] = [
       { userId: 'u-yuna', nickname: '유나', role: 'member', week: [8400, 2], month: [40300, 7] },
     ],
   },
-  sampleCrew('crew-seongsu', '성수 나이트런', '퇴근 후 성수에서 달리는 사람들', 'SSNIGHT', 14, 11600),
-  sampleCrew('crew-jamsil', '잠실 페이스메이커', '하프 완주를 목표로 함께 달려요', 'JSPACE', 9, 11000),
-  sampleCrew('crew-busan', '광안리 바람', '바다 보며 달리는 부산 크루', 'GWANGAN', 11, 12900),
-  sampleCrew('crew-mapo', '마포 주말러닝', '주말엔 길게, 천천히', 'MAPOWKND', 7, 9200),
+  sampleCrew('crew-seongsu', '성수 나이트런', '퇴근 후 성수에서 달리는 사람들', { sido: '서울', sigungu: '성동구' }, 'SSNIGHT', 14, 11600),
+  sampleCrew('crew-jamsil', '잠실 페이스메이커', '하프 완주를 목표로 함께 달려요', { sido: '서울', sigungu: '송파구' }, 'JSPACE', 9, 11000),
+  sampleCrew('crew-busan', '광안리 바람', '바다 보며 달리는 부산 크루', { sido: '부산', sigungu: '수영구' }, 'GWANGAN', 11, 12900),
+  sampleCrew('crew-mapo', '마포 주말러닝', '주말엔 길게, 천천히', { sido: '서울', sigungu: '마포구' }, 'MAPOWKND', 7, 9200),
+  sampleCrew('crew-suwon', '광교 호수런', '광교호수공원 한 바퀴부터 시작해요', { sido: '경기', sigungu: '수원시' }, 'GWANGGYO', 12, 8700),
+  sampleCrew('crew-bundang', '탄천 러닝클럽', '탄천 따라 달리는 분당·판교 러너', { sido: '경기', sigungu: '성남시' }, 'TANCHEON', 18, 10400),
+  sampleCrew('crew-gangnam', '양재천 모닝런', '출근 전 양재천 5km', { sido: '서울', sigungu: '강남구' }, 'YANGJAE', 10, 9800),
+  sampleCrew('crew-daegu', '수성못 페이서', '대구 수성못 주변 저녁 러닝', { sido: '대구', sigungu: '수성구' }, 'SUSEONG', 8, 8100),
+  sampleCrew('crew-jeju', '올레 트레일', '제주 오름과 올레길을 달려요', { sido: '제주', sigungu: '제주시' }, 'JEJUOLLE', 6, 13500),
 ];
 
 let myCrewId: string | null = 'crew-hangang';
@@ -114,6 +125,7 @@ function rankedCrews(period: CrewPeriod): CrewRankingItem[] {
     .map((crew) => ({
       id: crew.id,
       name: crew.name,
+      region: crew.region,
       memberCount: crewMemberCount(crew),
       distanceMeters: crewTotal(crew, period),
       isMine: crew.id === myCrewId,
@@ -136,6 +148,31 @@ function generateInviteCode(): string {
 /** GET /crews/rankings?period= */
 export function getCrewRankings(period: CrewPeriod): Promise<CrewRankingItem[]> {
   return wait(rankedCrews(period));
+}
+
+/**
+ * GET /crews?query=&sido=&sigungu= — crew search.
+ * Name/intro contains `query` (case-insensitive); region filters are exact matches. Sorted by this week's distance.
+ */
+export function searchCrews(params: CrewSearchParams): Promise<CrewSearchItem[]> {
+  const query = params.query?.trim().toLowerCase() ?? '';
+  return wait(
+    crews
+      .filter((crew) => !query || crew.name.toLowerCase().includes(query) || crew.intro.toLowerCase().includes(query))
+      .filter((crew) => !params.sido || crew.region?.sido === params.sido)
+      .filter((crew) => !params.sigungu || crew.region?.sigungu === params.sigungu)
+      .map((crew) => ({
+        id: crew.id,
+        name: crew.name,
+        intro: crew.intro,
+        region: crew.region,
+        memberCount: crewMemberCount(crew),
+        maxMembers: crew.maxMembers,
+        weekDistanceMeters: crewTotal(crew, 'week'),
+        isMine: crew.id === myCrewId,
+      }))
+      .sort((a, b) => b.weekDistanceMeters - a.weekDistanceMeters),
+  );
 }
 
 /** GET /users/me/crew → crewId or null */
@@ -164,6 +201,7 @@ export function getCrewDetail(crewId: string, period: CrewPeriod): Promise<CrewD
     id: crew.id,
     name: crew.name,
     intro: crew.intro,
+    region: crew.region,
     leaderNickname: crew.members.find((member) => member.role === 'leader')?.nickname ?? '크루장',
     memberCount: crewMemberCount(crew),
     maxMembers: crew.maxMembers,
@@ -186,6 +224,7 @@ export function createCrew(input: CreateCrewInput): Promise<string> {
     id,
     name: input.name.trim(),
     intro: input.intro.trim(),
+    region: input.region,
     inviteCode: generateInviteCode(),
     maxMembers: CREW_MAX_MEMBERS,
     members: [{ userId: ME_ID, nickname: ME_NICKNAME, role: 'leader', week: [0, 0], month: [0, 0] }],
