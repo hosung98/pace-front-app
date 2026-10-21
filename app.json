@@ -73,6 +73,12 @@
         "projectId": "3c94c264-6696-4c02-b5bc-6debfd999b68"
       }
     },
-    "owner": "kimhosung"
+    "owner": "kimhosung",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/3c94c264-6696-4c02-b5bc-6debfd999b68"
+    }
   }
 }

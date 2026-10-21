@@ -6,10 +6,12 @@
     "development-simulator": {
       "ios": {
         "simulator": true
-      }
+      },
+      "channel": "development-simulator"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "channel": "production"
     }
   },
   "submit": {
