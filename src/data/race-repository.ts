@@ -110,6 +110,7 @@ const races: MockRace[] = [
       { userId: ME_ID, nickname: ME_NICKNAME, result: { status: 'finished', rank: 2, finishSeconds: 1538, distanceMeters: 5000 } },
       { userId: 'u-minjun', nickname: '민준', result: { status: 'finished', rank: 3, finishSeconds: 1601, distanceMeters: 5000 } },
       { userId: 'u-yuna', nickname: '유나', result: { status: 'did_not_finish', rank: null, finishSeconds: null, distanceMeters: 3120 } },
+      { userId: 'u-seoyeon', nickname: '서연', result: { status: 'did_not_start', rank: null, finishSeconds: null, distanceMeters: 0 } },
     ],
   },
   {

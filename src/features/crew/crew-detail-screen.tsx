@@ -18,7 +18,7 @@ import {
 } from '@/data/crew-repository';
 import { formatKm } from '@/lib/format';
 
-import type { CrewDetail, CrewPeriod } from './types';
+import { CREW_REJOIN_COOLDOWN_HOURS, type CrewDetail, type CrewPeriod } from './types';
 
 const PERIOD_OPTIONS = [
   { value: 'week', label: '이번 주' },
@@ -185,6 +185,12 @@ export function CrewDetailScreen() {
                 onPress={() => void runAction(cancelCrewJoinRequest)}
               />
             </>
+          ) : null}
+          {isMember && confirmLeave ? (
+            <Text style={styles.pendingText}>
+              나가면 {CREW_REJOIN_COOLDOWN_HOURS}시간 동안 다른 크루에 들어갈 수 없고, 이번 기간에 달린 거리는 크루 합계에서
+              빠져요.
+            </Text>
           ) : null}
           {isMember ? (
             <PaceButton

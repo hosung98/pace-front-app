@@ -5,6 +5,7 @@
  */
 import {
   CREW_MAX_MEMBERS,
+  CREW_REJOIN_COOLDOWN_HOURS,
   type CreateCrewInput,
   type CrewDetail,
   type CrewMemberStat,
@@ -80,6 +81,21 @@ const crews: MockCrew[] = [
 
 let myCrewId: string | null = 'crew-hangang';
 let myPendingCrewId: string | null = null;
+let myLeftCrewAt: number | null = null;
+
+/** Mirrors the server's 409 ALREADY_IN_CREW / CREW_REJOIN_COOLDOWN checks. */
+function joinBlockedReason(): string | null {
+  if (myCrewId) return '이미 가입한 크루가 있어요. 크루는 하나만 가입할 수 있어요.';
+  if (myLeftCrewAt === null) return null;
+  const availableAt = myLeftCrewAt + CREW_REJOIN_COOLDOWN_HOURS * 60 * 60 * 1000;
+  const remainingMs = availableAt - Date.now();
+  if (remainingMs <= 0) return null;
+  const totalMinutes = Math.ceil(remainingMs / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const remaining = hours > 0 ? `${hours}시간${minutes > 0 ? ` ${minutes}분` : ''}` : `${minutes}분`;
+  return `크루를 나온 뒤 ${CREW_REJOIN_COOLDOWN_HOURS}시간 동안은 새 크루에 들어갈 수 없어요. ${remaining} 뒤에 다시 시도해 주세요.`;
+}
 
 function wait<T>(value: T): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), MOCK_LATENCY_MS));
@@ -163,7 +179,8 @@ export function getCrewDetail(crewId: string, period: CrewPeriod): Promise<CrewD
 
 /** POST /crews */
 export function createCrew(input: CreateCrewInput): Promise<string> {
-  if (myCrewId) return Promise.reject(new Error('이미 가입한 크루가 있어요. 크루는 하나만 가입할 수 있어요.'));
+  const blocked = joinBlockedReason();
+  if (blocked) return Promise.reject(new Error(blocked));
   const id = `crew-${Date.now()}`;
   crews.push({
     id,
@@ -180,7 +197,8 @@ export function createCrew(input: CreateCrewInput): Promise<string> {
 
 /** POST /crews/join-by-code */
 export function joinCrewByCode(code: string): Promise<string> {
-  if (myCrewId) return Promise.reject(new Error('이미 가입한 크루가 있어요. 크루는 하나만 가입할 수 있어요.'));
+  const blocked = joinBlockedReason();
+  if (blocked) return Promise.reject(new Error(blocked));
   const crew = crews.find((item) => item.inviteCode === code.trim().toUpperCase());
   if (!crew) return Promise.reject(new Error('초대 코드가 올바르지 않아요.'));
   crew.members.push({ userId: ME_ID, nickname: ME_NICKNAME, role: 'member', week: [0, 0], month: [0, 0] });
@@ -191,7 +209,8 @@ export function joinCrewByCode(code: string): Promise<string> {
 
 /** POST /crews/{crewId}/join-requests (leader approves later) */
 export function requestToJoinCrew(crewId: string): Promise<void> {
-  if (myCrewId) return Promise.reject(new Error('이미 가입한 크루가 있어요. 크루는 하나만 가입할 수 있어요.'));
+  const blocked = joinBlockedReason();
+  if (blocked) return Promise.reject(new Error(blocked));
   findCrew(crewId);
   myPendingCrewId = crewId;
   return wait(undefined);
@@ -213,6 +232,7 @@ export function leaveCrew(crewId: string): Promise<void> {
   crew.members = crew.members.filter((member) => member.userId !== ME_ID);
   if (crew.members.length === 0) crews.splice(crews.indexOf(crew), 1);
   myCrewId = null;
+  myLeftCrewAt = Date.now();
   return wait(undefined);
 }
 

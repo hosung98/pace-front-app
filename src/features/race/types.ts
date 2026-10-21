@@ -6,7 +6,12 @@ export type RaceStatus = 'recruiting' | 'confirmed' | 'cancelled' | 'live' | 'fi
 
 export type RaceVisibility = 'public' | 'private';
 
-export type RaceResultStatus = 'finished' | 'did_not_finish';
+/**
+ * finished: reached the target distance within the time limit.
+ * did_not_finish: started but ran out of time. did_not_start: started more than
+ * RACE_LATE_START_GRACE_SECONDS late (or never). disqualified: failed the server's GPS checks.
+ */
+export type RaceResultStatus = 'finished' | 'did_not_finish' | 'did_not_start' | 'disqualified';
 
 export type RaceParticipant = {
   userId: string;
@@ -62,3 +67,5 @@ export const RACE_MIN_PARTICIPANTS = 2;
 export const RACE_MAX_PARTICIPANTS = 20;
 /** Runners get this many minutes per km to finish before the race closes. */
 export const RACE_TIME_LIMIT_MINUTES_PER_KM = 12;
+/** A run that starts this late still counts; the clock always runs from the official start. */
+export const RACE_LATE_START_GRACE_SECONDS = 60;

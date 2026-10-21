@@ -21,7 +21,14 @@ import {
   getRaceEndsAt,
   getRaceStatus,
 } from './race-status';
-import { RACE_TIME_LIMIT_MINUTES_PER_KM, type RaceDetail, type RaceParticipant, type RaceStatus } from './types';
+import {
+  RACE_LATE_START_GRACE_SECONDS,
+  RACE_TIME_LIMIT_MINUTES_PER_KM,
+  type RaceDetail,
+  type RaceParticipant,
+  type RaceResultStatus,
+  type RaceStatus,
+} from './types';
 
 type LoadState = { key: string; race: RaceDetail | null };
 
@@ -256,8 +263,39 @@ function Participants({ participants }: Readonly<{ participants: RaceParticipant
   );
 }
 
+const RESULT_ORDER: Record<RaceResultStatus, number> = {
+  finished: 0,
+  did_not_finish: 1,
+  did_not_start: 2,
+  disqualified: 3,
+};
+
+const RESULT_BADGES: Record<Exclude<RaceResultStatus, 'finished'>, string> = {
+  did_not_finish: 'DNF',
+  did_not_start: 'DNS',
+  disqualified: '실격',
+};
+
+function unfinishedStatus(status: RaceResultStatus | undefined): Exclude<RaceResultStatus, 'finished'> {
+  return !status || status === 'finished' ? 'did_not_start' : status;
+}
+
+function resultMeta(status: RaceResultStatus, distanceMeters: number): string {
+  if (status === 'did_not_start') return '불참 · 출발하지 않았어요';
+  if (status === 'disqualified') return '실격 · 기록 확인 필요';
+  return `미완주 · ${(distanceMeters / 1000).toFixed(2)}km`;
+}
+
+function compareResults(a: RaceParticipant, b: RaceParticipant): number {
+  const statusA = a.result?.status ?? 'did_not_start';
+  const statusB = b.result?.status ?? 'did_not_start';
+  if (statusA !== statusB) return RESULT_ORDER[statusA] - RESULT_ORDER[statusB];
+  if (statusA === 'finished') return (a.result?.rank ?? Infinity) - (b.result?.rank ?? Infinity);
+  return (b.result?.distanceMeters ?? 0) - (a.result?.distanceMeters ?? 0);
+}
+
 function Results({ participants, distanceMeters }: Readonly<{ participants: RaceParticipant[]; distanceMeters: number }>) {
-  const sorted = [...participants].sort((a, b) => (a.result?.rank ?? Infinity) - (b.result?.rank ?? Infinity));
+  const sorted = [...participants].sort(compareResults);
   const winner = sorted[0];
 
   return (
@@ -286,17 +324,20 @@ function Results({ participants, distanceMeters }: Readonly<{ participants: Race
                 <Text style={styles.resultMeta}>
                   {finished
                     ? `페이스 ${formatPace(result.finishSeconds! / (distanceMeters / 1000))}`
-                    : `미완주 · ${((result?.distanceMeters ?? 0) / 1000).toFixed(2)}km`}
+                    : resultMeta(result?.status ?? 'did_not_start', result?.distanceMeters ?? 0)}
                 </Text>
               </View>
               <Text style={[styles.resultTime, !finished && styles.dnf]}>
-                {finished ? formatDuration(result.finishSeconds!) : 'DNF'}
+                {finished ? formatDuration(result.finishSeconds!) : RESULT_BADGES[unfinishedStatus(result?.status)]}
               </Text>
             </View>
           );
         })}
       </View>
-      <Text style={styles.footnote}>목표 거리에 도달한 시점까지 걸린 시간으로 순위를 매겨요.</Text>
+      <Text style={styles.footnote}>
+        출발 시각부터 목표 거리에 도달할 때까지 걸린 시간으로 순위를 매겨요. 출발 후 {RACE_LATE_START_GRACE_SECONDS}초
+        안에 시작하지 않으면 불참(DNS)이고, GPS 기록이 비정상이면 실격 처리돼요.
+      </Text>
     </>
   );
 }

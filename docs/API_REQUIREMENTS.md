@@ -82,6 +82,7 @@ erDiagram
   crews ||--o{ crew_members : "최대 50명"
   users ||--o| crew_members : "크루 1개만"
   crews ||--o{ crew_join_requests : ""
+  users ||--o{ crew_membership_history : "탈퇴 이력(24시간 제한)"
   users ||--o{ crew_join_requests : ""
   crews ||--o{ crew_period_stats : "주간/월간 거리 캐시"
   users ||--o{ races : "방장"
@@ -241,6 +242,17 @@ CREATE TABLE crew_members (
 );
 CREATE INDEX idx_crew_members_crew ON crew_members (crew_id, joined_at);
 
+-- 가입/탈퇴 이력. 자진 탈퇴 후 24시간 재가입 제한 판정 + 운영 감사용
+CREATE TABLE crew_membership_history (
+  id           BIGSERIAL PRIMARY KEY,
+  user_id      BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  crew_id      BIGINT      NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+  joined_at    TIMESTAMPTZ NOT NULL,
+  left_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  leave_reason VARCHAR(16) NOT NULL              -- left | kicked | disbanded | account_deleted
+);
+CREATE INDEX idx_crew_history_user_left ON crew_membership_history (user_id, left_at DESC);
+
 CREATE TABLE crew_join_requests (
   id           BIGSERIAL PRIMARY KEY,
   public_id    CHAR(26)    NOT NULL UNIQUE,
@@ -302,7 +314,7 @@ CREATE TABLE race_participants (
   race_id              BIGINT      NOT NULL REFERENCES races(id) ON DELETE CASCADE,
   user_id              BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   joined_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
-  status               VARCHAR(16) NOT NULL DEFAULT 'joined', -- joined | finished | dnf | disqualified
+  status               VARCHAR(16) NOT NULL DEFAULT 'joined', -- joined | finished | dnf | dns | disqualified
   run_id               BIGINT      REFERENCES runs(id) ON DELETE SET NULL,
   finish_seconds       INT,                              -- 출발(starts_at) → 목표 거리 도달까지
   distance_meters      INT,                              -- 미완주자는 달린 거리
@@ -673,6 +685,7 @@ GROUP BY day;
 **규칙**
 
 - 한 사용자는 **크루 1개만** 가입 (`crew_members.user_id` PK). 가입된 상태에서 가입/생성 요청 → `409 ALREADY_IN_CREW`.
+- **자진 탈퇴 후 24시간 동안 다른 크루 가입·생성 불가** → `409 CREW_REJOIN_COOLDOWN` (`retryAfter` 포함). 강퇴·해체는 제한 없음.
 - 가입 방법 2가지: ① 가입 신청 → 크루장 승인 ② 초대 코드 입력(즉시 가입).
 - 크루 거리 = 멤버들의 러닝 거리 합. **멤버별 `joined_at` 이후 시작한 러닝만** 합산 (크루를 옮겨 다니며 거리 몰아주기 방지).
 - 기간: `week` = Asia/Seoul 월요일 00:00 ~ 다음 월요일 00:00, `month` = 매월 1일 00:00 ~.
@@ -717,7 +730,8 @@ GROUP BY cm.crew_id;
 ```
 
 > 캐시 갱신: `POST /runs`(작성자가 크루 멤버이고 `started_at >= joined_at`이면 해당 week/month 행 `+distance`),
-> `DELETE /runs`·restore 시 반대로 증감. 탈퇴한 멤버의 이번 기간 거리는 **크루에서 빠짐**(배치 재계산 결과와 일치시키기 위해).
+> `DELETE /runs`·restore 시 반대로 증감. **탈퇴한 멤버의 이번 기간 거리는 크루 합계에서 뺌**(확정) —
+> 탈퇴 트랜잭션에서 해당 멤버의 이번 주·이번 달 거리만큼 `crew_period_stats` 차감 (배치 재계산 결과와 일치).
 
 #### 🔒 `GET /users/me/crew` — 내 크루
 
@@ -757,7 +771,8 @@ GROUP BY cm.crew_id;
 }
 ```
 
-거리 내림차순. **비멤버에게 공개할지**는 8장 결정 사항(기본안: 비멤버는 닉네임·거리만, 멤버 수 30명 이하 전체).
+거리 내림차순. **비멤버에게도 공개**(확정): 닉네임·거리·러닝 횟수. 단 `profile_visibility = private` 인 멤버는
+본인·같은 크루 멤버가 아니면 `user` 를 `{ "id": null, "nickname": "러너", "profileImageUrl": null }` 로 가려서 응답.
 
 #### 크루 관리
 
@@ -892,11 +907,15 @@ recruiting ──(마감 시각, 인원 ≥ min)──▶ confirmed ──(start
 서버 검증 및 계산:
 
 1. 참가자 본인 기록인지, 대결 `status ∈ {live, finished}` 이고 `now ≤ endsAt + 10분`(유예) 인지.
-2. `run.started_at` 이 `startsAt ± 60초` 안인지 (자동 시작이므로 대부분 일치).
+2. **출발 판정**(확정): `startsAt - 5초 ≤ run.started_at ≤ startsAt + 60초` 이면 정상 참가.
+   60초 넘게 늦으면 `dns`(불참)로 기록하고 순위에서 제외. 늦게 시작해도 **기록은 항상 공식 출발 시각부터** 계산(늦은 만큼 불리).
 3. `run_routes.points` 를 순서대로 누적해 **목표 거리 도달 시점의 타임스탬프**를 찾음 → `finishSeconds = 도달 시각 - startsAt`.
    일시정지 시간은 빼지 않음(레이스는 벽시계 기준).
 4. 도달 못 했으면 `distance_meters` 만 기록, 상태는 확정 때 `dnf`.
-5. 이상치: 구간 속도 > 7m/s(약 2:23/km)가 30초 이상, 위치 정확도 불량 비율 과다 등 → `flag_reason` 기록 후 `disqualified` (규칙은 8장에서 확정).
+5. **실격 기준**(확정) → `flag_reason` 기록 후 `disqualified`:
+   - `speed_over_limit`: 7m/s(약 2:23/km) 초과 구간이 연속 30초 이상 (차량·자전거 의심)
+   - `poor_gps`: 정확도(`acc`) 30m 초과 포인트가 전체의 30% 초과, 또는 60초 이상 포인트 공백이 누적 3분 초과
+   - 실격자는 결과 화면에 사유와 함께 표시. 이의 제기는 1차 범위에서 제외(운영자 수동 복구)
 
 응답 `200 { "status": "finished", "finishSeconds": 1650, "provisionalRank": 2 }` (확정 전 임시 순위).
 같은 runId 재제출은 멱등, 다른 runId로 재제출은 `409`.
@@ -904,7 +923,7 @@ recruiting ──(마감 시각, 인원 ≥ min)──▶ confirmed ──(start
 #### 🔒 `GET /races/{raceId}/results` — 결과 (확정 후)
 
 `{ "finalizedAt": "...", "items": [{ "rank", "user", "status", "finishSeconds", "distanceMeters", "averagePaceSecondsPerKm" }] }`.
-정렬: 완주자(`finishSeconds ASC`) → DNF(`distance DESC`) → 실격.
+정렬: 완주자(`finishSeconds ASC`) → DNF(`distance DESC`) → DNS → 실격. 앱 표시: 완주=기록, `DNF`, `DNS`, `실격`.
 
 #### 대결 스케줄러 (Spring `@Scheduled(fixedDelay = 15s)` 또는 Quartz)
 
@@ -914,7 +933,7 @@ recruiting ──(마감 시각, 인원 ≥ min)──▶ confirmed ──(start
 | `join_deadline_at` | `recruiting` → 인원 ≥ min 이면 `confirmed`, 아니면 `cancelled(not_enough_participants)` | 확정 / 취소 알림 |
 | 출발 1분 전 | — | "1분 뒤 출발! 앱을 열어 주세요" |
 | `starts_at` | `confirmed` → `live` | — |
-| `ends_at` (+10분 유예) | 미제출자 `dnf`, 순위 계산해 `rank` 저장, `live` → `finished` | 결과 알림 (1등 축하) |
+| `ends_at` (+10분 유예) | 결과 미제출자 `dns`, 순위 계산해 `rank` 저장, `live` → `finished` | 결과 알림 (1등 축하) |
 
 - 조회 쿼리는 위 부분 인덱스(`idx_races_deadline` 등)를 사용: `WHERE status='recruiting' AND join_deadline_at <= now() LIMIT 100`.
 - 서버가 여러 대면 ShedLock 으로 중복 실행 방지. 각 전이는 `UPDATE ... WHERE status = '이전상태'` 조건부 갱신으로 멱등.
@@ -1060,7 +1079,22 @@ DB 마이그레이션은 Flyway `V1__init.sql` 에 3장의 DDL을 그대로 사�
 
 ---
 
-## 8. 결정이 필요한 사항
+## 8. 결정 사항
+
+### 8.1 확정 (2026-10-21)
+
+| 항목 | 결정 | 반영 위치 |
+| --- | --- | --- |
+| 대결 실격 기준 | 7m/s 초과 구간 연속 30초 이상, GPS 정확도 30m 초과 포인트 30% 초과(또는 공백 누적 3분) | §4.8 결과 제출 |
+| 대결 출발 허용 오차 | 출발 후 **60초 안**에 시작하면 참가 인정, 기록은 공식 출발 시각부터. 넘으면 DNS | §4.8, 앱 `RACE_LATE_START_GRACE_SECONDS` |
+| 대결 제한 시간 | **km당 12분 고정** (3K 36분, 5K 60분, 10K 2시간, 하프 약 4시간 13분) | `races.ends_at`, 앱 `RACE_TIME_LIMIT_MINUTES_PER_KM` |
+| 크루 정원 | **50명** | `crews.max_members`, 앱 `CREW_MAX_MEMBERS` |
+| 크루 재가입 제한 | 자진 탈퇴 후 **24시간** 다른 크루 가입·생성 불가 (강퇴·해체는 제외) | `crew_membership_history`, 앱 `CREW_REJOIN_COOLDOWN_HOURS` |
+| 랭킹 기간 경계 | **Asia/Seoul 고정** — 주간 월요일 00:00, 월간 1일 00:00 | §4.7 |
+| 탈퇴 멤버 거리 | 이번 기간 크루 합계에서 **뺌** | §4.7 랭킹 캐시 |
+| 비멤버 공개 범위 | 크루 정보·순위·총거리 + 멤버 닉네임·거리 공개. 비공개 프로필은 "러너"로 가림 | §4.7 멤버 거리 |
+
+### 8.2 아직 미정
 
 1. 거리 계산 최종 책임: 초기엔 클라이언트 값 저장 + 서버 재계산 값 로그 비교 → 이후 서버 값으로 통일할지
 2. 원본 GPS(`run_routes.points`) 보관 기간 (예: 무기한 vs 1년 후 simplified만 남기기)
@@ -1069,12 +1103,6 @@ DB 마이그레이션은 Flyway `V1__init.sql` 에 3장의 DDL을 그대로 사�
 5. 이미지 스토리지(S3 vs Cloudflare R2 — R2는 전송료 무료)와 CDN 도메인
 6. access/refresh 토큰 만료(30분/30일 제안)
 7. 신고 기능·운영자 관리 범위 (크루 이름·대결 제목 부적절 신고)
-8. **대결 부정행위 기준**: 구간 최고 속도, GPS 정확도 불량 비율, 출발 시각 허용 오차(±60초 제안), 실격 시 이의 제기 여부
-9. **대결 제한 시간**: km당 12분(5K = 60분) 고정 vs 방장이 설정
-10. **크루 정원**(50명 제안)·크루 해체 조건, 크루 탈퇴 후 재가입 대기 기간(어뷰징 방지, 예: 24시간)
-11. **크루 랭킹 기간 경계**: Asia/Seoul 고정(제안) vs 사용자 시간대. 탈퇴한 멤버의 이번 기간 거리 제외(제안) vs 유지
-12. 크루 멤버 목록·거리의 **비멤버 공개 범위**
-13. 대결 출발 시 앱이 백그라운드/종료 상태일 때 처리 (푸시 탭 → 앱 열림 → 늦게 출발한 만큼 불리 / 허용 오차 내 자동 보정)
 
 ---
 

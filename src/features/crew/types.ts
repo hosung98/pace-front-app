@@ -46,5 +46,7 @@ export type CreateCrewInput = {
 };
 
 export const CREW_MAX_MEMBERS = 50;
+/** After leaving a crew, joining or creating another one is blocked for this long (stops ranking hopping). */
+export const CREW_REJOIN_COOLDOWN_HOURS = 24;
 export const CREW_NAME_MAX_LENGTH = 20;
 export const CREW_INTRO_MAX_LENGTH = 100;
