@@ -7,7 +7,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import Constants from 'expo-constants';
+import { isRunningInExpoGo } from 'expo';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { useRouter } from 'expo-router';
@@ -71,7 +71,7 @@ export function RunTrackingScreen() {
       return false;
     }
 
-    if (Constants.expoGoConfig) {
+    if (isRunningInExpoGo()) {
       setMessage(
         'Expo Go에서는 백그라운드 GPS를 사용할 수 없어요. PACE development build를 설치해 주세요.',
       );
