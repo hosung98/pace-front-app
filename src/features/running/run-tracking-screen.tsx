@@ -1,40 +1,38 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import {
-  AppState,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import { isRunningInExpoGo } from 'expo';
-import * as Location from 'expo-location';
-import * as TaskManager from 'expo-task-manager';
-import { useRouter } from 'expo-router';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PaceBrand } from '@/components/pace-brand';
+import { BackHeader } from '@/components/back-header';
 import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
-
-import { RUN_LOCATION_TASK } from './location-task';
-import { RunReadyView } from './run-ready-view';
 import {
   clearActiveRun,
-  formatDuration,
   getActiveRunSnapshot,
-  getElapsedMilliseconds,
   refreshActiveRunSnapshot,
-  saveCompletedRun,
   subscribeToActiveRun,
-  type ActiveRun,
-  type CompletedRun,
   writeActiveRun,
-} from './run-storage';
+} from '@/data/active-run-store';
+import { saveCompletedRun } from '@/data/completed-runs-repository';
+import { formatDuration, formatKm, formatPace } from '@/lib/format';
+
+import {
+  checkTrackingReadiness,
+  getLocationFailureMessage,
+  startLocationTracking,
+  stopLocationTracking,
+} from './location-tracking';
+import { RunReadyView } from './run-ready-view';
+import {
+  createActiveRun,
+  getCurrentPaceSecondsPerKm,
+  getElapsedMilliseconds,
+  pauseActiveRun,
+  resumeActiveRun,
+  toCompletedRun,
+} from './run-session';
 
 export function RunTrackingScreen() {
-  const router = useRouter();
   const snapshot = useSyncExternalStore(
     subscribeToActiveRun,
     getActiveRunSnapshot,
@@ -64,81 +62,22 @@ export function RunTrackingScreen() {
     return () => clearInterval(timer);
   }, []);
 
-  const startLocationUpdates = useCallback(async () => {
-    if (Platform.OS === 'web') {
-      setMessage(
-        '화면이 잠긴 뒤에도 기록하려면 웹앱이 아닌 iOS 또는 Android 앱이 필요해요.',
-      );
-      return false;
-    }
-
-    if (isRunningInExpoGo()) {
-      setMessage(
-        'Expo Go에서는 백그라운드 GPS를 사용할 수 없어요. PACE development build를 설치해 주세요.',
-      );
-      return false;
-    }
-
-    if (!(await TaskManager.isAvailableAsync())) {
-      setMessage(
-        '백그라운드 GPS는 Expo Go에서 지원되지 않아요. 개발용 앱 빌드를 설치해 주세요.',
-      );
-      return false;
-    }
-
-    if (!(await Location.hasServicesEnabledAsync())) {
-      setMessage('기기의 위치 서비스를 켠 다음 다시 시도해 주세요.');
-      return false;
-    }
-
-    // "While in use" is enough: tracking started in the foreground keeps running with the
-    // screen locked (iOS background location indicator / Android foreground service).
-    const foreground = await Location.requestForegroundPermissionsAsync();
-    if (foreground.status !== 'granted') {
-      setMessage(
-        foreground.canAskAgain
-          ? '러닝 기록을 위해 앱 사용 중 위치 접근을 허용해 주세요.'
-          : '설정 > PACE > 위치에서 위치 접근을 허용한 다음 다시 시도해 주세요.',
-      );
-      return false;
-    }
-
-    return true;
-  }, []);
+  /** Shows the readiness problem (if any) and reports whether tracking may start. */
+  const ensureReady = async () => {
+    const problem = await checkTrackingReadiness();
+    if (problem) setMessage(problem);
+    return problem === null;
+  };
 
   const startRun = async () => {
     setBusy(true);
     setMessage('');
     try {
-      if (!(await startLocationUpdates())) return;
-
-      const timestamp = Date.now();
-      const nextRun: ActiveRun = {
-        id: `local-${timestamp}`,
-        status: 'running',
-        startedAt: timestamp,
-        segmentStartedAt: timestamp,
-        elapsedBeforeSegmentMs: 0,
-        distanceMeters: 0,
-        currentSpeedMetersPerSecond: 0,
-        routePoints: [],
-      };
+      if (!(await ensureReady())) return;
+      const nextRun = createActiveRun();
       await writeActiveRun(nextRun);
-      setNow(timestamp);
-      await Location.startLocationUpdatesAsync(RUN_LOCATION_TASK, {
-        accuracy: Location.Accuracy.BestForNavigation,
-        distanceInterval: 5,
-        timeInterval: 1000,
-        activityType: Location.ActivityType.Fitness,
-        pausesUpdatesAutomatically: false,
-        showsBackgroundLocationIndicator: true,
-        foregroundService: {
-          notificationTitle: 'PACE 러닝 기록 중',
-          notificationBody: '러닝을 기록하고 있어요.',
-          notificationColor: '#D5FA5B',
-          killServiceOnDestroy: false,
-        },
-      });
+      setNow(nextRun.startedAt);
+      await startLocationTracking();
     } catch (error) {
       console.error('Unable to start GPS run tracking.', error);
       await clearActiveRun();
@@ -155,14 +94,8 @@ export function RunTrackingScreen() {
     if (!run || run.status !== 'running') return;
     setBusy(true);
     try {
-      await Location.stopLocationUpdatesAsync(RUN_LOCATION_TASK);
-      const latestRun = getActiveRunSnapshot().run ?? run;
-      const pausedRun: ActiveRun = {
-        ...latestRun,
-        status: 'paused',
-        elapsedBeforeSegmentMs: getElapsedMilliseconds(latestRun, now),
-      };
-      await writeActiveRun(pausedRun);
+      await stopLocationTracking();
+      await writeActiveRun(pauseActiveRun(getActiveRunSnapshot().run ?? run));
     } catch (error) {
       console.error('Unable to pause GPS run tracking.', error);
       setErrorMessage('러닝을 일시 정지하지 못했어요. 다시 시도해 주세요.');
@@ -176,27 +109,9 @@ export function RunTrackingScreen() {
     setBusy(true);
     setMessage('');
     try {
-      if (!(await startLocationUpdates())) return;
-      const resumedRun: ActiveRun = {
-        ...run,
-        status: 'running',
-        segmentStartedAt: Date.now(),
-      };
-      await writeActiveRun(resumedRun);
-      await Location.startLocationUpdatesAsync(RUN_LOCATION_TASK, {
-        accuracy: Location.Accuracy.BestForNavigation,
-        distanceInterval: 5,
-        timeInterval: 1000,
-        activityType: Location.ActivityType.Fitness,
-        pausesUpdatesAutomatically: false,
-        showsBackgroundLocationIndicator: true,
-        foregroundService: {
-          notificationTitle: 'PACE 러닝 기록 중',
-          notificationBody: '러닝을 기록하고 있어요.',
-          notificationColor: '#D5FA5B',
-          killServiceOnDestroy: false,
-        },
-      });
+      if (!(await ensureReady())) return;
+      await writeActiveRun(resumeActiveRun(run));
+      await startLocationTracking();
     } catch (error) {
       console.error('Unable to resume GPS run tracking.', error);
       await writeActiveRun({ ...run, status: 'paused' });
@@ -213,28 +128,8 @@ export function RunTrackingScreen() {
     if (!run) return;
     setBusy(true);
     try {
-      if (await Location.hasStartedLocationUpdatesAsync(RUN_LOCATION_TASK)) {
-        await Location.stopLocationUpdatesAsync(RUN_LOCATION_TASK);
-      }
-
-      const latestRun = getActiveRunSnapshot().run ?? run;
-      const endedAt = Date.now();
-      const durationSeconds = Math.floor(
-        getElapsedMilliseconds(latestRun, endedAt) / 1000,
-      );
-      const completedRun: CompletedRun = {
-        id: latestRun.id,
-        startedAt: latestRun.startedAt,
-        endedAt,
-        distanceMeters: Math.round(latestRun.distanceMeters),
-        durationSeconds,
-        averagePaceSecondsPerKm:
-          latestRun.distanceMeters > 0
-            ? Math.round(durationSeconds / (latestRun.distanceMeters / 1000))
-            : null,
-        routePoints: latestRun.routePoints,
-      };
-      await saveCompletedRun(completedRun);
+      await stopLocationTracking();
+      await saveCompletedRun(toCompletedRun(getActiveRunSnapshot().run ?? run));
       await clearActiveRun();
       setConfirmingFinish(false);
       setMessage('러닝을 이 기기에 저장했어요. 서버 동기화는 아직 연결되지 않았어요.');
@@ -246,29 +141,16 @@ export function RunTrackingScreen() {
     }
   };
 
-  const confirmFinish = () => {
-    setConfirmingFinish(true);
-  };
-
   const elapsedSeconds = run
     ? Math.floor(getElapsedMilliseconds(run, now) / 1000)
     : 0;
   const speedKmh = run ? run.currentSpeedMetersPerSecond * 3.6 : 0;
-  const paceSecondsPerKm =
-    speedKmh > 0.5 ? Math.round(3600 / speedKmh) : null;
+  const paceSecondsPerKm = run ? getCurrentPaceSecondsPerKm(run) : null;
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="이전 화면으로 돌아가기"
-          onPress={() => router.back()}
-          style={styles.backButton}>
-          <Text style={styles.backArrow}>‹</Text>
-        </Pressable>
-        <PaceBrand />
-        <View style={styles.headerSpacer} />
+        <BackHeader />
       </View>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {run ? (
@@ -285,7 +167,7 @@ export function RunTrackingScreen() {
             <View style={styles.distanceCard}>
               <Text style={styles.metricLabel}>누적 거리</Text>
               <Text style={styles.distance}>
-                {(run.distanceMeters / 1000).toFixed(2)}
+                {formatKm(run.distanceMeters)}
                 <Text style={styles.distanceUnit}> km</Text>
               </Text>
               <Text style={styles.timer}>{formatDuration(elapsedSeconds)}</Text>
@@ -295,13 +177,7 @@ export function RunTrackingScreen() {
               <Metric label="현재 속도" value={`${speedKmh.toFixed(1)} km/h`} />
               <Metric
                 label="현재 페이스"
-                value={
-                  paceSecondsPerKm === null
-                    ? '--:-- /km'
-                    : `${Math.floor(paceSecondsPerKm / 60)}:${String(
-                        paceSecondsPerKm % 60,
-                      ).padStart(2, '0')} /km`
-                }
+                value={`${formatPace(paceSecondsPerKm)} /km`}
               />
             </View>
             <View style={styles.locationStatus}>
@@ -332,7 +208,7 @@ export function RunTrackingScreen() {
                   label="러닝 종료"
                   secondary
                   disabled={busy}
-                  onPress={confirmFinish}
+                  onPress={() => setConfirmingFinish(true)}
                 />
               </View>
             )}
@@ -368,17 +244,6 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function getLocationFailureMessage(error: unknown, fallback: string) {
-  if (
-    error instanceof Error &&
-    error.message.includes('ERR_LOCATION_INFO_PLIST')
-  ) {
-    return '현재 설치된 앱에 iOS 위치 권한 설정이 없어요. Expo Go에서는 백그라운드 GPS가 지원되지 않으니 PACE development build를 설치해 주세요.';
-  }
-
-  return fallback;
-}
-
 function ActionButton({
   label,
   secondary = false,
@@ -410,10 +275,7 @@ function ActionButton({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.background },
-  header: { width: '100%', maxWidth: 560, alignSelf: 'center', minHeight: 58, paddingHorizontal: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backButton: { width: 42, height: 42, alignItems: 'flex-start', justifyContent: 'center' },
-  backArrow: { color: C.text, fontSize: 31, lineHeight: 34 },
-  headerSpacer: { width: 42 },
+  header: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24 },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 36 },
   eyebrow: { marginTop: 22, color: C.accent, fontSize: 9, fontWeight: '600', letterSpacing: 1.8 },
   title: { marginTop: 8, color: C.text, fontSize: 25, fontWeight: '700' },

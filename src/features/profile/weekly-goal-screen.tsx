@@ -1,46 +1,36 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PaceBrand } from '@/components/pace-brand';
+import { BackHeader } from '@/components/back-header';
 import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
+import { getWeeklyGoalKm, saveWeeklyGoalKm } from '@/data/weekly-goal-repository';
 import {
   DEFAULT_WEEKLY_GOAL_KM,
   MAX_WEEKLY_GOAL_KM,
   MIN_WEEKLY_GOAL_KM,
-} from '@/features/running/run-insights';
-import {
-  readWeeklyGoalKm,
-  saveWeeklyGoalKm,
-} from '@/features/running/weekly-goal-storage';
+  WEEKLY_GOAL_STEP_KM,
+} from '@/features/running/weekly-goal';
+import { useFocusQuery } from '@/hooks/use-focus-query';
 
 export function WeeklyGoalScreen() {
   const router = useRouter();
-  const [goalKm, setGoalKm] = useState(DEFAULT_WEEKLY_GOAL_KM);
-  const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      let isActive = true;
-      readWeeklyGoalKm()
-        .then((value) => {
-          if (isActive) setGoalKm(value);
-        })
-        .catch((error: unknown) => {
-          console.error('Unable to load the weekly running goal.', error);
-          if (isActive) {
-            setErrorMessage('주간 목표를 불러오지 못했어요. 저장 공간을 확인해 주세요.');
-          }
-        });
-      return () => {
-        isActive = false;
-      };
-    }, []),
+  const {
+    data: goalKm,
+    setData: setGoalKm,
+    errorMessage: loadErrorMessage,
+    clearError,
+  } = useFocusQuery(
+    getWeeklyGoalKm,
+    DEFAULT_WEEKLY_GOAL_KM,
+    '주간 목표를 불러오지 못했어요. 저장 공간을 확인해 주세요.',
   );
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
+  const errorMessage = saveErrorMessage ?? loadErrorMessage;
 
   const saveGoal = async () => {
     setIsSaving(true);
@@ -49,7 +39,7 @@ export function WeeklyGoalScreen() {
       router.back();
     } catch (error) {
       console.error('Unable to save the weekly running goal.', error);
-      setErrorMessage('주간 목표를 저장하지 못했어요. 다시 시도해 주세요.');
+      setSaveErrorMessage('주간 목표를 저장하지 못했어요. 다시 시도해 주세요.');
     } finally {
       setIsSaving(false);
     }
@@ -61,17 +51,7 @@ export function WeeklyGoalScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
         <View style={styles.container}>
-        <View style={styles.header}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="이전 화면으로 돌아가기"
-            onPress={() => router.back()}
-            style={styles.backButton}>
-            <Text style={styles.backArrow}>‹</Text>
-          </Pressable>
-          <PaceBrand />
-          <View style={styles.headerSpacer} />
-          </View>
+        <BackHeader />
         <Text style={styles.eyebrow}>YOUR WEEKLY PACE</Text>
         <Text style={styles.title}>이번 주 목표를 정해요</Text>
         <Text style={styles.description}>
@@ -99,7 +79,7 @@ export function WeeklyGoalScreen() {
               accessibilityLabel="목표 5킬로미터 낮추기"
               accessibilityState={{ disabled: goalKm <= MIN_WEEKLY_GOAL_KM }}
               disabled={goalKm <= MIN_WEEKLY_GOAL_KM}
-              onPress={() => setGoalKm((value) => value - 5)}
+              onPress={() => setGoalKm((value) => value - WEEKLY_GOAL_STEP_KM)}
               style={[styles.stepButton, goalKm <= MIN_WEEKLY_GOAL_KM && styles.disabled]}>
               <Text style={styles.stepText}>−</Text>
             </Pressable>
@@ -109,7 +89,7 @@ export function WeeklyGoalScreen() {
               accessibilityLabel="목표 5킬로미터 높이기"
               accessibilityState={{ disabled: goalKm >= MAX_WEEKLY_GOAL_KM }}
               disabled={goalKm >= MAX_WEEKLY_GOAL_KM}
-              onPress={() => setGoalKm((value) => value + 5)}
+              onPress={() => setGoalKm((value) => value + WEEKLY_GOAL_STEP_KM)}
               style={[styles.stepButton, goalKm >= MAX_WEEKLY_GOAL_KM && styles.disabled]}>
               <Text style={styles.stepText}>+</Text>
             </Pressable>
@@ -140,7 +120,10 @@ export function WeeklyGoalScreen() {
       </ScrollView>
       <PaceErrorDialog
         message={errorMessage}
-        onClose={() => setErrorMessage(null)}
+        onClose={() => {
+          setSaveErrorMessage(null);
+          clearError();
+        }}
       />
     </SafeAreaView>
   );
@@ -150,10 +133,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.background },
   scrollContent: { flexGrow: 1 },
   container: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24 },
-  header: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backButton: { width: 42, height: 42, alignItems: 'flex-start', justifyContent: 'center' },
-  backArrow: { color: C.text, fontSize: 31, lineHeight: 34 },
-  headerSpacer: { width: 42 },
   eyebrow: { marginTop: 24, color: C.accent, fontSize: 9, fontWeight: '600', letterSpacing: 2 },
   title: { marginTop: 9, color: C.text, fontSize: 24, fontWeight: '700' },
   description: { marginTop: 6, color: C.muted, fontSize: 12, lineHeight: 18 },

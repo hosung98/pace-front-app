@@ -1,43 +1,29 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
 
 import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { TabScreenShell, tabScreenStyles } from '@/features/navigation/tab-screen-shell';
+import { listCompletedRuns } from '@/data/completed-runs-repository';
 import {
-  formatPace,
   getAllTimeInsights,
   getMonthlyInsights,
   getWeeklyInsights,
+  WEEKDAY_LABELS,
 } from '@/features/running/run-insights';
-import { readCompletedRuns, type CompletedRun } from '@/features/running/run-storage';
+import type { CompletedRun } from '@/features/running/types';
+import { useFocusQuery } from '@/hooks/use-focus-query';
+import { formatPace } from '@/lib/format';
 
 type Period = '주간' | '월간';
 
 export function StatsScreen() {
   const [period, setPeriod] = useState<Period>('주간');
-  const [completedRuns, setCompletedRuns] = useState<CompletedRun[]>([]);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      let isActive = true;
-      readCompletedRuns()
-        .then((runs) => {
-          if (isActive) setCompletedRuns(runs);
-        })
-        .catch((error: unknown) => {
-          console.error('Unable to load running statistics.', error);
-          if (isActive) {
-            setErrorMessage('러닝 통계를 불러오지 못했어요. 저장 공간을 확인해 주세요.');
-          }
-        });
-      return () => {
-        isActive = false;
-      };
-    }, []),
+  const { data: completedRuns, errorMessage, clearError } = useFocusQuery<CompletedRun[]>(
+    listCompletedRuns,
+    [],
+    '러닝 통계를 불러오지 못했어요. 저장 공간을 확인해 주세요.',
   );
 
   const insights = useMemo(
@@ -51,7 +37,7 @@ export function StatsScreen() {
     ? ('dailyDistancesKm' in insights ? insights.dailyDistancesKm : [])
     : ('weeklyDistancesKm' in insights ? insights.weeklyDistancesKm : []);
   const labels = period === '주간'
-    ? ['월', '화', '수', '목', '금', '토', '일']
+    ? [...WEEKDAY_LABELS]
     : values.map((_, index) => `${index + 1}주`);
   const maxValue = Math.max(...values, 1);
   const distanceKm = insights.distanceKm;
@@ -106,7 +92,7 @@ export function StatsScreen() {
       </View>
       <PaceErrorDialog
         message={errorMessage}
-        onClose={() => setErrorMessage(null)}
+        onClose={clearError}
       />
     </TabScreenShell>
   );

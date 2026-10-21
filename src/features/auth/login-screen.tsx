@@ -8,7 +8,8 @@ import {
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PaceBrand, PaceMark } from '@/components/pace-brand';
+import { BackHeader } from '@/components/back-header';
+import { PaceMark } from '@/components/pace-brand';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 
@@ -53,20 +54,7 @@ export function LoginScreen() {
         bounces={false}
         showsVerticalScrollIndicator={false}>
         <View style={styles.container}>
-          <View style={styles.header}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="이전 화면으로 돌아가기"
-              onPress={() => router.back()}
-              style={({ pressed }) => [
-                styles.backButton,
-                pressed && styles.pressed,
-              ]}>
-              <Text style={styles.backArrow}>‹</Text>
-            </Pressable>
-            <PaceBrand />
-            <View style={styles.headerSpacer} />
-          </View>
+          <BackHeader />
 
           <View style={styles.intro}>
             <View style={styles.markFrame}>
@@ -144,25 +132,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: 28,
     paddingBottom: 28,
-  },
-  header: {
-    minHeight: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-  },
-  backArrow: {
-    color: C.text,
-    fontSize: 36,
-    lineHeight: 40,
-  },
-  headerSpacer: {
-    width: 44,
   },
   intro: {
     alignItems: 'center',

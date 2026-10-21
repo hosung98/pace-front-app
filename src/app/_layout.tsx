@@ -6,7 +6,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { PaceColors } from '@/constants/pace';
 
-import '@/features/running/location-task';
+import '@/features/running/location-tracking';
 
 SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
   console.error('Unable to keep the native splash screen visible.', error);

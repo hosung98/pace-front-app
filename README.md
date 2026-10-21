@@ -43,8 +43,18 @@ are not connected to a backend.
   short window cannot fit the text and a minimum illustration. Tablet and wide web
   layouts use two columns. Safe areas and reduced motion are supported.
   Navigation has 20 points of bottom padding in addition to the device safe area.
-- Routes live in `src/app`, onboarding UI in `src/features/onboarding`, shared
-  branding in `src/components/pace-brand.tsx`, and colors in `src/constants/pace.ts`.
+- Project structure:
+
+  | Path | Role |
+  | --- | --- |
+  | `src/app` | Expo Router routes only (thin wrappers around feature screens) |
+  | `src/features/<feature>` | Screens and feature UI (home, runs, stats, social, profile, …) |
+  | `src/features/running` | Run domain: `types.ts`, pure session logic (`run-session.ts`), aggregates (`run-insights.ts`), GPS background task (`location-tracking.ts`) |
+  | `src/data` | Repositories — the only layer that touches storage. Swap these for API calls when the backend is connected |
+  | `src/hooks` | Shared hooks (`use-focus-query.ts` reloads data on screen focus) |
+  | `src/lib` | Pure helpers (`format.ts`, `geo.ts`) |
+  | `src/components` | Shared UI (`back-header.tsx`, `pace-brand.tsx`, feedback, swipe-to-delete) |
+  | `src/constants/pace.ts` | Colors and fonts |
 - Native splash configuration requires a new development/release build to preview
   accurately; Expo Go does not reproduce the final native splash.
 - Korean UI uses bundled static Pretendard Regular, SemiBold, and Bold fonts,

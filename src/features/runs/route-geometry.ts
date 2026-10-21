@@ -1,4 +1,4 @@
-import type { RunPoint } from '@/features/running/run-storage';
+import type { RunPoint } from '@/features/running/types';
 
 export type RouteCoordinate = { latitude: number; longitude: number };
 

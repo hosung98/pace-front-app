@@ -15,9 +15,12 @@ import Animated, {
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 
-import { formatPace, getWeeklyInsights } from './run-insights';
-import { readCompletedRuns, type CompletedRun } from './run-storage';
-import { readWeeklyGoalKm } from './weekly-goal-storage';
+import { listCompletedRuns } from '@/data/completed-runs-repository';
+import { getWeeklyGoalKm } from '@/data/weekly-goal-repository';
+import { formatPace } from '@/lib/format';
+
+import { getLatestRun, getWeeklyInsights } from './run-insights';
+import type { CompletedRun } from './types';
 
 const BUTTON_SIZE = 168;
 const PULSE_DURATION = 2600;
@@ -163,19 +166,15 @@ function useRunSummary(): Summary | null {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([readCompletedRuns(), readWeeklyGoalKm()])
+    Promise.all([listCompletedRuns(), getWeeklyGoalKm()])
       .then(([runs, goalKm]) => {
         if (cancelled) return;
         const weekly = getWeeklyInsights(runs);
-        const lastRun = runs.reduce<CompletedRun | null>(
-          (latest, run) => (!latest || run.startedAt > latest.startedAt ? run : latest),
-          null,
-        );
         setSummary({
           weeklyKm: weekly.distanceKm,
           weeklyRuns: weekly.runCount,
           goalKm,
-          lastRun,
+          lastRun: getLatestRun(runs),
         });
       })
       .catch((error: unknown) => {

@@ -1,24 +1,30 @@
-import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 
 import { PaceBrand, PaceMark } from '@/components/pace-brand';
 import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
+import { listCompletedRuns } from '@/data/completed-runs-repository';
+import { getWeeklyGoalKm } from '@/data/weekly-goal-repository';
 import {
-  formatPace,
+  getLatestRun,
+  getTodayDistanceKm,
   getWeekStart,
   getWeeklyInsights,
+  WEEKDAY_LABELS,
   type WeeklyInsights,
 } from '@/features/running/run-insights';
-import {
-  formatDuration,
-  readCompletedRuns,
-  type CompletedRun,
-} from '@/features/running/run-storage';
-import { readWeeklyGoalKm } from '@/features/running/weekly-goal-storage';
+import type { CompletedRun } from '@/features/running/types';
+import { DEFAULT_WEEKLY_GOAL_KM } from '@/features/running/weekly-goal';
+import { useFocusQuery } from '@/hooks/use-focus-query';
+import { formatDuration, formatKm, formatLongDate, formatPace } from '@/lib/format';
+
+const loadHomeData = async () => {
+  const [runs, weeklyGoalKm] = await Promise.all([listCompletedRuns(), getWeeklyGoalKm()]);
+  return { runs, weeklyGoalKm };
+};
 
 function SectionHeading({
   title,
@@ -85,7 +91,6 @@ function WeeklyProgressCard({
 }) {
   const weeklyDistanceKm = insights.distanceKm;
   const weeklyRunCount = insights.runCount;
-  const weekDays = ['월', '화', '수', '목', '금', '토', '일'];
   const progress = Math.min(weeklyDistanceKm / weeklyGoalKm, 1);
   const maxDayDistance = Math.max(weeklyGoalKm, ...insights.dailyDistancesKm, 1);
 
@@ -137,7 +142,7 @@ function WeeklyProgressCard({
             : 5;
 
           return (
-            <View key={weekDays[index]} style={styles.weekDay}>
+            <View key={WEEKDAY_LABELS[index]} style={styles.weekDay}>
               <View style={styles.weekBarTrack}>
                 <View
                   style={[
@@ -148,7 +153,7 @@ function WeeklyProgressCard({
                 />
               </View>
               <Text style={[styles.weekDayLabel, hasRun && styles.weekDayActive]}>
-                {weekDays[index]}
+                {WEEKDAY_LABELS[index]}
               </Text>
             </View>
           );
@@ -170,15 +175,11 @@ function RecentRunCard({ recentRun }: { recentRun: CompletedRun | null }) {
     );
   }
   const metrics = [
-    { label: '거리', value: (recentRun.distanceMeters / 1000).toFixed(2), unit: 'km' },
+    { label: '거리', value: formatKm(recentRun.distanceMeters), unit: 'km' },
     { label: '시간', value: formatDuration(recentRun.durationSeconds) },
     { label: '평균 페이스', value: formatPace(recentRun.averagePaceSecondsPerKm), unit: '/km' },
   ];
-  const dateLabel = new Date(recentRun.startedAt).toLocaleDateString('ko-KR', {
-    month: 'long',
-    day: 'numeric',
-    weekday: 'long',
-  });
+  const dateLabel = formatLongDate(recentRun.startedAt);
 
   return (
     <View style={styles.recentCard}>
@@ -210,39 +211,17 @@ function RecentRunCard({ recentRun }: { recentRun: CompletedRun | null }) {
 
 export function HomeScreen() {
   const router = useRouter();
-  const [completedRuns, setCompletedRuns] = useState<CompletedRun[]>([]);
-  const [weeklyGoalKm, setWeeklyGoalKm] = useState(20);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      let isActive = true;
-      Promise.all([readCompletedRuns(), readWeeklyGoalKm()])
-        .then(([runs, goal]) => {
-          if (!isActive) return;
-          setCompletedRuns(runs);
-          setWeeklyGoalKm(goal);
-        })
-        .catch((error: unknown) => {
-          console.error('Unable to load home running insights.', error);
-          if (isActive) {
-            setErrorMessage('러닝 정보를 불러오지 못했어요. 저장 공간을 확인해 주세요.');
-          }
-        });
-      return () => {
-        isActive = false;
-      };
-    }, []),
+  const { data, errorMessage, clearError } = useFocusQuery(
+    loadHomeData,
+    { runs: [] as CompletedRun[], weeklyGoalKm: DEFAULT_WEEKLY_GOAL_KM },
+    '러닝 정보를 불러오지 못했어요. 저장 공간을 확인해 주세요.',
   );
+  const { runs: completedRuns, weeklyGoalKm } = data;
 
   const now = new Date();
   const weeklyInsights = getWeeklyInsights(completedRuns, now);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
-  const todayDistanceKm = completedRuns
-    .filter((run) => run.startedAt >= todayStart && run.startedAt < tomorrowStart)
-    .reduce((total, run) => total + run.distanceMeters / 1000, 0);
-  const recentRun = completedRuns[0] ?? null;
+  const todayDistanceKm = getTodayDistanceKm(completedRuns, now);
+  const recentRun = getLatestRun(completedRuns);
   const weekStart = getWeekStart(now);
 
   return (
@@ -299,7 +278,7 @@ export function HomeScreen() {
       </ScrollView>
       <PaceErrorDialog
         message={errorMessage}
-        onClose={() => setErrorMessage(null)}
+        onClose={clearError}
       />
     </SafeAreaView>
   );

@@ -1,8 +1,11 @@
-import type { CompletedRun } from './run-storage';
+import type { CompletedRun } from './types';
 
-export const DEFAULT_WEEKLY_GOAL_KM = 20;
-export const MIN_WEEKLY_GOAL_KM = 5;
-export const MAX_WEEKLY_GOAL_KM = 100;
+/*
+ * Aggregations over completed runs (weeks start on Monday, local time).
+ * Backend counterpart: GET /dashboard and GET /stats/running.
+ */
+
+export const WEEKDAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'] as const;
 
 export type WeeklyInsights = {
   distanceKm: number;
@@ -107,8 +110,17 @@ export function getAllTimeInsights(runs: CompletedRun[]): AllTimeInsights {
   };
 }
 
-export function formatPace(secondsPerKm: number | null): string {
-  if (secondsPerKm === null || !Number.isFinite(secondsPerKm)) return '—';
-  const roundedSeconds = Math.round(secondsPerKm);
-  return `${Math.floor(roundedSeconds / 60)}'${String(roundedSeconds % 60).padStart(2, '0')}''`;
+export function getTodayDistanceKm(runs: CompletedRun[], now = new Date()): number {
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+  return runs
+    .filter((run) => run.startedAt >= todayStart && run.startedAt < tomorrowStart)
+    .reduce((total, run) => total + run.distanceMeters / 1000, 0);
+}
+
+export function getLatestRun(runs: CompletedRun[]): CompletedRun | null {
+  return runs.reduce<CompletedRun | null>(
+    (latest, run) => (!latest || run.startedAt > latest.startedAt ? run : latest),
+    null,
+  );
 }

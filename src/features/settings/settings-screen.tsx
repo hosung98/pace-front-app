@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PaceBrand } from '@/components/pace-brand';
+import { BackHeader } from '@/components/back-header';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 
 export function SettingsScreen() {
-  const router = useRouter();
   const [runReminders, setRunReminders] = useState(true);
   const [weeklySummary, setWeeklySummary] = useState(true);
   const [privateProfile, setPrivateProfile] = useState(false);
@@ -18,13 +16,7 @@ export function SettingsScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <View style={styles.fixedContent}>
-        <View style={styles.header}>
-          <Pressable accessibilityRole="button" accessibilityLabel="마이 화면으로 돌아가기" onPress={() => router.back()} style={styles.backButton}>
-            <Text style={styles.backArrow}>‹</Text>
-          </Pressable>
-          <PaceBrand />
-          <View style={styles.headerSpacer} />
-        </View>
+        <BackHeader backLabel="마이 화면으로 돌아가기" />
         <Text style={styles.eyebrow}>PREFERENCES</Text>
         <Text style={styles.title}>앱 설정</Text>
         <Text style={styles.description}>PACE를 나에게 맞게 설정해 보세요.</Text>
@@ -136,10 +128,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.background },
   fixedContent: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24 },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 28 },
-  header: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backButton: { width: 42, height: 42, alignItems: 'flex-start', justifyContent: 'center' },
-  backArrow: { color: C.text, fontSize: 31, lineHeight: 34 },
-  headerSpacer: { width: 42 },
   eyebrow: { marginTop: 23, color: C.accent, fontSize: 9, fontWeight: '600', letterSpacing: 2 },
   title: { marginTop: 8, color: C.text, fontSize: 25, fontWeight: '700' },
   description: { marginTop: 5, color: C.muted, fontSize: 12 },

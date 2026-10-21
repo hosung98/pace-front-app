@@ -1,46 +1,58 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 
 import { PaceErrorDialog, PaceLoadingState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { SwipeToDelete } from '@/components/swipe-to-delete';
 import { PaceColors as C } from '@/constants/pace';
-import { TabScreenShell, tabScreenStyles } from '@/features/navigation/tab-screen-shell';
-import {
-  formatPace,
-  getWeeklyInsights,
-} from '@/features/running/run-insights';
 import {
   deleteCompletedRun,
-  formatDuration,
-  readCompletedRuns,
+  listCompletedRuns,
   restoreCompletedRun,
-  type CompletedRun,
-} from '@/features/running/run-storage';
+} from '@/data/completed-runs-repository';
+import { TabScreenShell, tabScreenStyles } from '@/features/navigation/tab-screen-shell';
+import { getWeeklyInsights } from '@/features/running/run-insights';
+import type { CompletedRun } from '@/features/running/types';
+import { useFocusQuery } from '@/hooks/use-focus-query';
+import { formatDuration, formatKm, formatPace, formatShortDate } from '@/lib/format';
 
 const UNDO_DURATION_MS = 4000;
-
-function formatRunDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString('ko-KR', {
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-  });
-}
+const SKELETON_DELAY_MS = 200;
 
 export function RunsScreen() {
   const router = useRouter();
-  const [completedRuns, setCompletedRuns] = useState<CompletedRun[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const {
+    data: completedRuns,
+    setData: setCompletedRuns,
+    isLoading,
+    errorMessage: loadErrorMessage,
+    clearError,
+    reload,
+  } = useFocusQuery<CompletedRun[]>(
+    listCompletedRuns,
+    [],
+    '러닝 기록을 불러오지 못했어요. 잠시 후 다시 확인해 주세요.',
+  );
+  const [actionErrorMessage, setActionErrorMessage] = useState<string | null>(null);
   const [showSkeleton, setShowSkeleton] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deletedRun, setDeletedRun] = useState<CompletedRun | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorMessage = actionErrorMessage ?? loadErrorMessage;
 
   useEffect(() => () => {
     if (undoTimer.current) clearTimeout(undoTimer.current);
   }, []);
+
+  // Only show the skeleton for slow loads so fast storage reads don't flicker.
+  useEffect(() => {
+    if (!isLoading) return;
+    const timer = setTimeout(() => setShowSkeleton(true), SKELETON_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      setShowSkeleton(false);
+    };
+  }, [isLoading]);
 
   const handleDelete = async (run: CompletedRun) => {
     setCompletedRuns((runs) => runs.filter((item) => item.id !== run.id));
@@ -51,8 +63,8 @@ export function RunsScreen() {
       undoTimer.current = setTimeout(() => setDeletedRun(null), UNDO_DURATION_MS);
     } catch (error) {
       console.error('Unable to delete run.', error);
-      setCompletedRuns(await readCompletedRuns().catch(() => completedRuns));
-      setErrorMessage('기록을 삭제하지 못했어요. 다시 시도해 주세요.');
+      await reload();
+      setActionErrorMessage('기록을 삭제하지 못했어요. 다시 시도해 주세요.');
     }
   };
 
@@ -63,45 +75,13 @@ export function RunsScreen() {
     setDeletedRun(null);
     try {
       await restoreCompletedRun(run);
-      setCompletedRuns(await readCompletedRuns());
+      await reload();
     } catch (error) {
       console.error('Unable to restore run.', error);
-      setErrorMessage('기록을 되돌리지 못했어요.');
+      setActionErrorMessage('기록을 되돌리지 못했어요.');
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      let isActive = true;
-      setIsLoading(true);
-      setErrorMessage(null);
-      const skeletonTimer = setTimeout(() => {
-        if (isActive) setShowSkeleton(true);
-      }, 200);
-
-      readCompletedRuns()
-        .then((items) => {
-          if (isActive) setCompletedRuns(items);
-        })
-        .catch((error: unknown) => {
-          console.error('Unable to load completed runs.', error);
-          if (isActive) {
-            setErrorMessage('러닝 기록을 불러오지 못했어요. 잠시 후 다시 확인해 주세요.');
-          }
-        })
-        .finally(() => {
-          if (isActive) {
-            clearTimeout(skeletonTimer);
-            setIsLoading(false);
-            setShowSkeleton(false);
-          }
-        });
-      return () => {
-        isActive = false;
-        clearTimeout(skeletonTimer);
-      };
-    }, []),
-  );
   const weeklyInsights = getWeeklyInsights(completedRuns);
 
   return (
@@ -156,33 +136,21 @@ export function RunsScreen() {
       ) : completedRuns.map((run) => (
         <SwipeToDelete
           key={run.id}
-          accessibilityLabel={`${formatRunDate(run.startedAt)} 러닝 기록, ${(run.distanceMeters / 1000).toFixed(2)}킬로미터`}
+          accessibilityLabel={`${formatShortDate(run.startedAt)} 러닝 기록, ${formatKm(run.distanceMeters)}킬로미터`}
           onDelete={() => handleDelete(run)}
           style={[tabScreenStyles.card, styles.runCard]}
           pressedStyle={styles.pressed}
-          onPress={() => router.push({
-            pathname: '/run-detail',
-            params: {
-              runId: run.id,
-              title: 'GPS 러닝 기록',
-              startedAt: String(run.startedAt),
-              distance: String(run.distanceMeters / 1000),
-              duration: formatDuration(run.durationSeconds),
-              pace: formatPace(run.averagePaceSecondsPerKm),
-              durationSeconds: String(run.durationSeconds),
-              routePointCount: String(run.routePoints.length),
-            },
-          })}>
+          onPress={() => router.push({ pathname: '/run-detail', params: { runId: run.id } })}>
           <View style={styles.runHeader}>
             <View>
-              <Text style={styles.runDate}>{formatRunDate(run.startedAt)}</Text>
+              <Text style={styles.runDate}>{formatShortDate(run.startedAt)}</Text>
               <Text style={styles.runNote}>GPS 러닝 기록</Text>
             </View>
             <Text style={styles.chevron}>›</Text>
           </View>
           <View style={tabScreenStyles.divider} />
           <View style={styles.metrics}>
-            <Metric label="거리" value={(run.distanceMeters / 1000).toFixed(2)} unit="km" />
+            <Metric label="거리" value={formatKm(run.distanceMeters)} unit="km" />
             <Metric label="시간" value={formatDuration(run.durationSeconds)} />
             <Metric label="평균 페이스" value={formatPace(run.averagePaceSecondsPerKm)} unit="/km" />
           </View>
@@ -190,7 +158,10 @@ export function RunsScreen() {
       ))}
       <PaceErrorDialog
         message={errorMessage}
-        onClose={() => setErrorMessage(null)}
+        onClose={() => {
+          setActionErrorMessage(null);
+          clearError();
+        }}
       />
     </TabScreenShell>
   );

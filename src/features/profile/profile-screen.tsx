@@ -1,13 +1,14 @@
-import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 
 import { PaceMark } from '@/components/pace-brand';
 import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { TabScreenShell, tabScreenStyles } from '@/features/navigation/tab-screen-shell';
-import { readWeeklyGoalKm } from '@/features/running/weekly-goal-storage';
+import { getWeeklyGoalKm } from '@/data/weekly-goal-repository';
+import { DEFAULT_WEEKLY_GOAL_KM } from '@/features/running/weekly-goal';
+import { useFocusQuery } from '@/hooks/use-focus-query';
 
 const menuItems = [
   { label: '앱 설정', detail: '알림, 거리 단위, 개인정보', route: '/settings' },
@@ -16,26 +17,10 @@ const menuItems = [
 
 export function ProfileScreen() {
   const router = useRouter();
-  const [weeklyGoalKm, setWeeklyGoalKm] = useState(20);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      let isActive = true;
-      readWeeklyGoalKm()
-        .then((goal) => {
-          if (isActive) setWeeklyGoalKm(goal);
-        })
-        .catch((error: unknown) => {
-          console.error('Unable to load the weekly running goal.', error);
-          if (isActive) {
-            setErrorMessage('주간 목표를 불러오지 못했어요. 저장 공간을 확인해 주세요.');
-          }
-        });
-      return () => {
-        isActive = false;
-      };
-    }, []),
+  const { data: weeklyGoalKm, errorMessage, clearError } = useFocusQuery(
+    getWeeklyGoalKm,
+    DEFAULT_WEEKLY_GOAL_KM,
+    '주간 목표를 불러오지 못했어요. 저장 공간을 확인해 주세요.',
   );
 
   return (
@@ -94,7 +79,7 @@ export function ProfileScreen() {
       </Pressable>
       <PaceErrorDialog
         message={errorMessage}
-        onClose={() => setErrorMessage(null)}
+        onClose={clearError}
       />
     </TabScreenShell>
   );
