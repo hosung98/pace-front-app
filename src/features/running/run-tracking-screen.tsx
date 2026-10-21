@@ -90,15 +90,15 @@ export function RunTrackingScreen() {
       return false;
     }
 
+    // "While in use" is enough: tracking started in the foreground keeps running with the
+    // screen locked (iOS background location indicator / Android foreground service).
     const foreground = await Location.requestForegroundPermissionsAsync();
     if (foreground.status !== 'granted') {
-      setMessage('러닝 기록을 위해 앱 사용 중 위치 접근을 허용해 주세요.');
-      return false;
-    }
-
-    const background = await Location.requestBackgroundPermissionsAsync();
-    if (background.status !== 'granted') {
-      setMessage('화면이 잠겨도 기록하려면 항상 위치 접근을 허용해야 해요.');
+      setMessage(
+        foreground.canAskAgain
+          ? '러닝 기록을 위해 앱 사용 중 위치 접근을 허용해 주세요.'
+          : '설정 > PACE > 위치에서 위치 접근을 허용한 다음 다시 시도해 주세요.',
+      );
       return false;
     }
 
