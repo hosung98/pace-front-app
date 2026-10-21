@@ -1,113 +1,558 @@
-# PACE 백엔드 API 요구사항 (초안)
+# PACE 백엔드 설계서 (Spring Boot API · DB)
 
-현재 앱의 홈, 기록, 통계, 소셜, 마이/설정 화면은 정적 샘플 데이터를 사용합니다.
-이 문서는 Spring Boot 백엔드 구현을 시작할 때 필요한 API와 데이터 계약을
-제안합니다. 경로와 필드명은 초안이며, 인증·러닝 측정 방식을 결정한 뒤 확정할
-수 있습니다.
+PACE 앱(Expo/React Native)이 필요로 하는 백엔드 API, DB 테이블, 구현 순서를 정리한
+문서입니다. Spring Boot 서버 구현과 DB 설계의 기준 문서로 사용합니다.
 
-## 공통 규칙
+- 대상: Spring Boot 3.x (Java 21), Spring Security + JWT, Spring Data JPA
+- DB: **PostgreSQL 16 기준**으로 작성 (MySQL 8 사용 시 차이는 [부록 B](#부록-b-mysql-8-사용-시-차이))
+- 상태: 초안 v2. 경로·필드명은 구현하면서 확정합니다. 확정되면 앱의 `src/data/*` 저장소
+  함수 내부만 API 호출로 교체합니다.
 
-- Base path: `/api/v1`
-- 요청·응답 본문: UTF-8 JSON
-- 시간: ISO 8601 UTC (`2026-10-20T05:00:00Z`)
-- 거리: 미터 정수(`distanceMeters`), 평균 페이스: 초/킬로미터
-  (`averagePaceSecondsPerKm`)
-- 인증이 필요한 API는 `Authorization: Bearer <accessToken>` 사용
-- 목록 응답은 커서 기반 페이지네이션 사용
-- 오류 응답은 `code`, `message`, `requestId`를 포함
+---
+
+## 0. 현재 앱 데이터 현황
+
+백엔드 연결 전이라 앱 데이터는 **기기 저장**과 **목업(UI 전용)** 두 종류입니다.
+
+| 데이터 | 현재 위치 | 저장소 코드 | 백엔드 연결 후 |
+| --- | --- | --- | --- |
+| 완료한 러닝 기록 + GPS 경로 | 기기 (AsyncStorage `@pace/completed-runs`) | `src/data/completed-runs-repository.ts` | `GET/POST/DELETE /runs` |
+| 진행 중인 러닝 | 기기 (`@pace/active-run`) | `src/data/active-run-store.ts` | **기기 유지** (서버 전송 X, 종료 시 `POST /runs`) |
+| 주간 목표 | 기기 (`@pace/weekly-goal-km`) | `src/data/weekly-goal-repository.ts` | `GET/PATCH /users/me/settings` |
+| 홈·통계 집계 | 기기 기록으로 앱에서 계산 | `src/features/running/run-insights.ts` | `GET /dashboard`, `GET /stats/running` |
+| 소셜 피드 게시물·사진 | **목업** (하드코딩 샘플) | `src/features/social/*` | `/social/*`, `/media/*` |
+| 프로필 이름 "PACE 러너" | **목업** | `profile-screen.tsx` | `GET /users/me` |
+| 소셜 로그인 버튼 | **UI만** (실제 인증 없음) | `login-screen.tsx` | `POST /auth/{provider}` |
+| 앱 설정 토글(알림·단위·비공개) | **화면 상태만** (저장 안 됨) | `settings-screen.tsx` | `PATCH /users/me/settings` |
+
+---
+
+## 1. 공통 규칙
+
+| 항목 | 규칙 |
+| --- | --- |
+| Base path | `/api/v1` |
+| 형식 | UTF-8 JSON, 필드명 camelCase |
+| 인증 | `Authorization: Bearer <accessToken>` (JWT, 30분) / refresh token (30일, 회전) |
+| ID | 서버 ID는 `BIGINT` 내부키 + 외부 노출용 `public_id`(ULID 문자열 26자). API에는 public_id만 노출 |
+| 시간 | ISO-8601 UTC (`2026-10-21T05:00:00Z`). 앱은 epoch ms를 쓰므로 변환 필요 |
+| 날짜 집계 | 요청의 `timeZone`(IANA, 기본 `Asia/Seoul`) 기준. 주 시작은 **월요일** |
+| 단위 | 거리 `meters`(정수), 시간 `seconds`(정수), 페이스 `secondsPerKm`(정수, 없으면 `null`) |
+| 페이지네이션 | 커서 기반: `?cursor=<opaque>&limit=20` (최대 50) → `{ items, nextCursor }` |
+| 멱등성 | 생성 API(`POST /runs`, `POST /social/posts`)는 `Idempotency-Key` 헤더 지원 |
+| 소프트 삭제 | 러닝·게시물은 `deleted_at` 사용 (복구·감사용), 계정 탈퇴 시 하드 삭제 배치 |
+
+### 오류 응답
 
 ```json
 {
   "code": "VALIDATION_ERROR",
   "message": "요청 값을 확인해 주세요.",
-  "requestId": "req_01..."
+  "requestId": "01JB...",
+  "fieldErrors": [{ "field": "weeklyGoalMeters", "reason": "5000~100000 사이, 5000 단위" }]
 }
 ```
 
-## 1. 소셜 로그인
+| HTTP | code | 상황 |
+| --- | --- | --- |
+| 400 | `VALIDATION_ERROR` | Bean Validation 실패, 형식 오류 |
+| 401 | `UNAUTHORIZED` / `TOKEN_EXPIRED` | 토큰 없음·만료 (앱은 `TOKEN_EXPIRED`면 refresh 후 재시도) |
+| 403 | `FORBIDDEN` | 남의 리소스 접근 |
+| 404 | `NOT_FOUND` | 없는 리소스 / 삭제됨 |
+| 409 | `CONFLICT` | 중복 (예: 같은 `clientRunId` 다른 내용) |
+| 413 | `PAYLOAD_TOO_LARGE` | 경로 포인트·이미지 한도 초과 |
+| 429 | `RATE_LIMITED` | 요청 과다 |
+| 500 | `INTERNAL_ERROR` | 서버 오류 |
 
-### `POST /auth/{provider}`
+Spring에서는 `@RestControllerAdvice` + `ErrorCode` enum + `BusinessException` 하나로 통일합니다.
 
-지원 provider: `google`, `kakao`, `apple`.
+---
 
-앱에서 얻은 provider 인증 결과를 서버가 검증하고, PACE 자체 세션을 발급합니다.
-provider별 SDK가 주는 결과가 다를 수 있으므로 앱은 provider access token을
-임의로 PACE access token처럼 사용하지 않습니다. authorization code, ID token,
-PKCE 사용 여부는 플랫폼과 provider SDK 설정에 맞춰 확정합니다.
+## 2. 도메인 / ERD
 
-예시 요청(공통 계약의 초안):
+```mermaid
+erDiagram
+  users ||--o{ user_auth_providers : "로그인 수단"
+  users ||--o{ refresh_tokens : ""
+  users ||--|| user_settings : ""
+  users ||--o{ runs : ""
+  runs ||--|| run_routes : "GPS 경로(1:1)"
+  users ||--o{ posts : ""
+  posts }o--o| runs : "공유한 러닝(선택)"
+  posts ||--o{ post_media : ""
+  media_assets ||--o{ post_media : ""
+  users ||--o{ media_assets : ""
+  posts ||--o{ post_reactions : ""
+  users ||--o{ post_reactions : ""
+  users ||--o{ follows : "follower/followee"
+  users ||--o{ user_blocks : ""
+  users ||--o{ device_push_tokens : ""
+```
+
+### 설계 포인트
+
+1. **GPS 경로는 `runs`와 분리한 `run_routes` 테이블(1:1, JSONB)** 에 저장합니다.
+   - 앱은 5m/1초 간격으로 수집 → 10km ≈ 2,000포인트, 1시간 ≈ 최대 3,600포인트(약 300KB).
+   - 포인트를 행 단위(`run_points`)로 넣으면 러닝 1회에 수천 행 → 목록/통계 쿼리에 불필요한 부하.
+   - 경로는 "러닝 상세에서 통째로 읽고 통째로 쓰는" 데이터라 1행 JSONB가 단순하고 빠릅니다.
+   - 목록 화면은 `runs`만 조회 → 가볍게 유지. 지도용 축약 경로(`simplified_points`, ≤400점)도 저장.
+   - 나중에 "근처 코스 검색" 같은 공간 쿼리가 필요해지면 PostGIS `geometry(LineString)` 컬럼을 추가.
+2. **러닝 요약값(`distance_meters` 등)은 `runs`에 비정규화**해서 통계를 `SUM/COUNT`로 바로 계산.
+3. **`(user_id, client_run_id)` 유니크** → 오프라인 재전송 시 중복 저장 방지(멱등).
+4. 주간 목표는 `user_settings.weekly_goal_meters`(정수 m). 앱의 km 값 × 1000.
+
+---
+
+## 3. DB 테이블 (PostgreSQL DDL)
+
+```sql
+-- 공통: updated_at 은 JPA @PreUpdate 또는 트리거로 갱신
+
+CREATE TABLE users (
+  id                 BIGSERIAL PRIMARY KEY,
+  public_id          CHAR(26)     NOT NULL UNIQUE,          -- ULID
+  nickname           VARCHAR(30)  NOT NULL,                  -- 화면 표시명
+  handle             VARCHAR(30)  UNIQUE,                    -- 검색용 별칭(@id), 선택
+  profile_image_url  VARCHAR(500),
+  bio                VARCHAR(150),
+  profile_visibility VARCHAR(16)  NOT NULL DEFAULT 'public', -- public | followers | private
+  searchable         BOOLEAN      NOT NULL DEFAULT TRUE,
+  status             VARCHAR(16)  NOT NULL DEFAULT 'active', -- active | deleting | deleted
+  created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  deleted_at         TIMESTAMPTZ
+);
+CREATE INDEX idx_users_nickname_lower ON users (lower(nickname));
+
+-- 소셜 로그인 연결 (한 사용자에 여러 provider 연결 가능)
+CREATE TABLE user_auth_providers (
+  id                BIGSERIAL PRIMARY KEY,
+  user_id           BIGINT       NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider          VARCHAR(16)  NOT NULL,          -- google | kakao | apple
+  provider_user_id  VARCHAR(255) NOT NULL,          -- provider의 sub / id
+  email             VARCHAR(255),                   -- 받을 수 있을 때만 (Apple은 relay 메일일 수 있음)
+  created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  last_login_at     TIMESTAMPTZ,
+  UNIQUE (provider, provider_user_id)
+);
+CREATE INDEX idx_auth_providers_user ON user_auth_providers (user_id);
+
+CREATE TABLE refresh_tokens (
+  id           BIGSERIAL PRIMARY KEY,
+  user_id      BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash   CHAR(64)    NOT NULL UNIQUE,         -- SHA-256(원문). 원문 저장 금지
+  family_id    CHAR(26)    NOT NULL,                -- 회전 체인. 재사용 감지 시 family 전체 폐기
+  device_name  VARCHAR(100),
+  expires_at   TIMESTAMPTZ NOT NULL,
+  revoked_at   TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_refresh_tokens_user ON refresh_tokens (user_id);
+
+CREATE TABLE user_settings (
+  user_id                     BIGINT      PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  weekly_goal_meters          INT         NOT NULL DEFAULT 20000
+    CHECK (weekly_goal_meters BETWEEN 5000 AND 100000 AND weekly_goal_meters % 5000 = 0),
+  distance_unit               VARCHAR(4)  NOT NULL DEFAULT 'km',   -- km | mi
+  time_zone                   VARCHAR(64) NOT NULL DEFAULT 'Asia/Seoul',
+  notify_run_reminder         BOOLEAN     NOT NULL DEFAULT TRUE,
+  notify_weekly_summary       BOOLEAN     NOT NULL DEFAULT TRUE,
+  run_reminder_time           TIME,                                -- 예: 07:00 (선택)
+  default_post_visibility     VARCHAR(16) NOT NULL DEFAULT 'followers',
+  updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE runs (
+  id                          BIGSERIAL PRIMARY KEY,
+  public_id                   CHAR(26)     NOT NULL UNIQUE,
+  user_id                     BIGINT       NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_run_id               VARCHAR(64)  NOT NULL,     -- 앱이 만든 id (예: local-1792561466354)
+  title                       VARCHAR(60),               -- 선택. 없으면 앱이 "GPS 러닝 기록"
+  started_at                  TIMESTAMPTZ  NOT NULL,
+  ended_at                    TIMESTAMPTZ  NOT NULL,
+  duration_seconds            INT          NOT NULL CHECK (duration_seconds >= 0),  -- 일시정지 제외
+  distance_meters             INT          NOT NULL CHECK (distance_meters >= 0),
+  average_pace_seconds_per_km INT,                        -- 거리 0이면 NULL
+  elevation_gain_meters       INT,                        -- 선택(추후)
+  route_point_count           INT          NOT NULL DEFAULT 0,
+  source                      VARCHAR(16)  NOT NULL DEFAULT 'app_gps', -- app_gps | manual | import
+  created_at                  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  updated_at                  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  deleted_at                  TIMESTAMPTZ,
+  CONSTRAINT uq_runs_user_client UNIQUE (user_id, client_run_id),
+  CONSTRAINT ck_runs_time CHECK (ended_at >= started_at)
+);
+-- 목록(최신순)·주간/월간 통계 모두 이 인덱스 하나로 처리
+CREATE INDEX idx_runs_user_started ON runs (user_id, started_at DESC) WHERE deleted_at IS NULL;
+
+CREATE TABLE run_routes (
+  run_id             BIGINT      PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+  points             JSONB       NOT NULL,   -- 원본 [{t,lat,lng,alt,acc,spd}, ...]
+  simplified_points  JSONB       NOT NULL,   -- 지도 표시용 ≤400점 [[lat,lng], ...]
+  min_lat            DOUBLE PRECISION, max_lat DOUBLE PRECISION,
+  min_lng            DOUBLE PRECISION, max_lng DOUBLE PRECISION,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE media_assets (
+  id            BIGSERIAL PRIMARY KEY,
+  public_id     CHAR(26)     NOT NULL UNIQUE,
+  owner_id      BIGINT       NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  purpose       VARCHAR(20)  NOT NULL,              -- social_post | profile_image
+  storage_key   VARCHAR(300) NOT NULL,              -- S3/R2 object key
+  content_type  VARCHAR(50)  NOT NULL,
+  size_bytes    INT          NOT NULL,
+  width         INT, height INT,
+  status        VARCHAR(16)  NOT NULL DEFAULT 'pending', -- pending | ready | orphaned
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_media_owner_status ON media_assets (owner_id, status);
+
+CREATE TABLE posts (
+  id              BIGSERIAL PRIMARY KEY,
+  public_id       CHAR(26)     NOT NULL UNIQUE,
+  author_id       BIGINT       NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  run_id          BIGINT       REFERENCES runs(id) ON DELETE SET NULL,
+  message         VARCHAR(500),
+  visibility      VARCHAR(16)  NOT NULL,             -- private | followers | public
+  show_route      BOOLEAN      NOT NULL DEFAULT FALSE, -- 경로 지도 공개 여부(기본 비공개)
+  reaction_count  INT          NOT NULL DEFAULT 0,   -- 비정규화 카운터
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  deleted_at      TIMESTAMPTZ
+);
+CREATE INDEX idx_posts_author_created ON posts (author_id, created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX idx_posts_public_created ON posts (created_at DESC)
+  WHERE deleted_at IS NULL AND visibility = 'public';
+
+CREATE TABLE post_media (
+  post_id     BIGINT   NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  media_id    BIGINT   NOT NULL REFERENCES media_assets(id),
+  sort_order  SMALLINT NOT NULL,                    -- 0~3 (최대 4장)
+  PRIMARY KEY (post_id, media_id)
+);
+
+CREATE TABLE post_reactions (
+  post_id     BIGINT      NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  user_id     BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type        VARCHAR(16) NOT NULL DEFAULT 'cheer',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (post_id, user_id, type)
+);
+
+CREATE TABLE follows (
+  follower_id  BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  followee_id  BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status       VARCHAR(16) NOT NULL,                -- pending | accepted
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  accepted_at  TIMESTAMPTZ,
+  PRIMARY KEY (follower_id, followee_id),
+  CHECK (follower_id <> followee_id)
+);
+CREATE INDEX idx_follows_followee ON follows (followee_id, status);
+
+CREATE TABLE user_blocks (
+  blocker_id  BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  blocked_id  BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (blocker_id, blocked_id)
+);
+
+CREATE TABLE device_push_tokens (
+  id            BIGSERIAL PRIMARY KEY,
+  public_id     CHAR(26)     NOT NULL UNIQUE,
+  user_id       BIGINT       NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token         VARCHAR(255) NOT NULL UNIQUE,      -- Expo push token (ExponentPushToken[...])
+  platform      VARCHAR(8)   NOT NULL,             -- ios | android
+  active        BOOLEAN      NOT NULL DEFAULT TRUE,
+  last_seen_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_push_tokens_user ON device_push_tokens (user_id) WHERE active;
+```
+
+### `run_routes.points` JSON 형식
+
+키를 짧게 해서 용량을 줄입니다. 앱 `RunPoint` ↔ 서버 필드 매핑:
+
+| 앱 `RunPoint` | API (`routePoints[]`) | DB JSON 키 |
+| --- | --- | --- |
+| `recordedAt` (epoch ms) | `recordedAt` (ISO) | `t` (epoch ms, 정수) |
+| `latitude` | `latitude` | `lat` |
+| `longitude` | `longitude` | `lng` |
+| `altitudeMeters` | `altitudeMeters` | `alt` |
+| `accuracyMeters` | `accuracyMeters` | `acc` |
+| `speedMetersPerSecond` | `speedMetersPerSecond` | `spd` |
 
 ```json
+[{"t":1792561466354,"lat":37.5444,"lng":127.0374,"alt":18.2,"acc":6,"spd":2.7}, ...]
+```
+
+---
+
+## 4. API 명세
+
+> 표기: 🔓 인증 불필요 / 🔒 accessToken 필요. DTO는 Java `record` 기준 이름입니다.
+
+### 4.1 인증 (Auth)
+
+#### 🔓 `POST /auth/{provider}` — 소셜 로그인/가입
+
+`provider`: `google` | `kakao` | `apple`. 앱이 provider SDK로 받은 토큰을 보내면, 서버가 provider에
+검증 후 PACE 토큰을 발급합니다. 없는 사용자면 `users` + `user_settings` + `user_auth_providers` 생성.
+
+```json
+// SocialLoginRequest
 {
-  "authorizationCode": "<provider authorization code>",
-  "redirectUri": "pacefrontapp://auth/callback",
-  "codeVerifier": "<PKCE verifier when used>"
+  "idToken": "<google/apple id_token>",      // google, apple
+  "accessToken": "<kakao access token>",     // kakao (사용자 정보 API 조회용)
+  "nonce": "<apple nonce>",                  // apple
+  "displayName": "김호성"                     // apple 최초 가입 시에만 전달됨(선택)
 }
 ```
 
-성공 응답:
+| provider | 서버 검증 방법 |
+| --- | --- |
+| google | id_token 서명(JWKS) + `aud` = 앱 client id 검증 |
+| apple | id_token 서명(Apple JWKS) + `aud` = bundle id(`com.hocompany.pace`) + nonce 검증 |
+| kakao | `GET https://kapi.kakao.com/v2/user/me` 로 access token 검증·사용자 id 조회 |
 
 ```json
+// AuthTokenResponse (200)
 {
-  "accessToken": "<pace access token>",
-  "refreshToken": "<pace refresh token>",
-  "expiresIn": 3600,
-  "user": {
-    "id": "user_123",
-    "displayName": "러너",
-    "profileImageUrl": null
-  },
+  "accessToken": "eyJ...",
+  "refreshToken": "rt_...",
+  "accessTokenExpiresIn": 1800,
+  "user": { "id": "01JB...", "nickname": "러너", "profileImageUrl": null },
   "isNewUser": true
 }
 ```
 
-앱 재시작 시 세션 갱신이 필요하면 `POST /auth/refresh`로 refresh token을 교환하고,
-로그아웃 시 `POST /auth/logout`에서 refresh token을 폐기합니다.
+- 신규 가입이면 `nickname` 기본값: provider 이름 → 없으면 `러너1234`.
+- 로그인 전 기기에 저장된 기록은 앱이 **로그인 직후 `POST /runs`로 일괄 업로드**합니다(4.4 참고).
 
-### `POST /auth/refresh`
+#### 🔓 `POST /auth/refresh`
 
-요청: `{ "refreshToken": "<pace refresh token>" }`
+요청 `{ "refreshToken": "rt_..." }` → 응답 `AuthTokenResponse`(user 제외 가능).
+refresh token은 **매번 회전**, 이미 사용된 토큰이 다시 오면 같은 `family_id` 전체 폐기(탈취 대응).
 
-응답: 새 `accessToken`, 회전된 `refreshToken`, `expiresIn`을 반환합니다.
-이전 refresh token은 재사용할 수 없도록 폐기합니다.
+#### 🔒 `POST /auth/logout`
 
-### `POST /auth/logout`
+요청 `{ "refreshToken": "rt_..." }` → `204`. 해당 토큰 폐기 + 요청 시 이 기기의 push token 비활성화.
 
-요청: `{ "refreshToken": "<pace refresh token>" }`
+---
 
-응답: `{ "success": true }`. 서버는 전달된 refresh token을 폐기합니다.
+### 4.2 내 정보 (Users)
 
-## 2. 내 정보
-
-### `GET /users/me`
-
-로그인 사용자의 `id`, `displayName`, `profileImageUrl`, `createdAt`을 반환합니다.
-인사말에 쓸 이름이 아직 없을 때 앱이 사용할 표시명 규칙도 정하면 좋습니다.
-
-## 3. 메인 대시보드
-
-### `GET /dashboard?from=2026-10-19&to=2026-10-25`
-
-현재 주간 요약, 일별 러닝 거리, 최근 러닝 한 건을 한 번에 반환합니다.
-화면의 통계를 위해 권장하는 응답 형태:
+#### 🔒 `GET /users/me`
 
 ```json
+// MeResponse
 {
-  "period": {
+  "id": "01JB...",
+  "nickname": "PACE 러너",
+  "handle": "pace_runner",
+  "profileImageUrl": null,
+  "bio": null,
+  "profileVisibility": "public",
+  "linkedProviders": ["kakao", "apple"],
+  "createdAt": "2026-10-21T05:00:00Z",
+  "counts": { "runs": 12, "followers": 3, "following": 5 }
+}
+```
+
+#### 🔒 `PATCH /users/me`
+
+```json
+// UpdateMeRequest (모든 필드 선택)
+{ "nickname": "호성", "handle": "hosung", "bio": "주 3회 러너", "profileImageId": "01JB...", "profileVisibility": "followers" }
+```
+
+검증: nickname 2~30자, handle `^[a-z0-9_.]{3,30}$` 유니크(409), bio ≤150자. 응답: `MeResponse`.
+
+#### 🔒 `DELETE /users/me` — 회원 탈퇴
+
+`202 { "requestId": "..." }`. `users.status = 'deleting'` → 토큰 전부 폐기 → 배치가 러닝·경로·게시물·미디어(스토리지 포함) 하드 삭제.
+Apple 로그인 사용자는 Apple `revoke` API 호출 필요(App Store 심사 요구사항).
+
+---
+
+### 4.3 설정 (Settings) — 주간 목표 포함
+
+#### 🔒 `GET /users/me/settings`
+
+```json
+// SettingsResponse
+{
+  "weeklyGoalMeters": 20000,
+  "distanceUnit": "km",
+  "timeZone": "Asia/Seoul",
+  "notifications": { "runReminder": true, "weeklySummary": true, "runReminderTime": "07:00" },
+  "defaultPostVisibility": "followers",
+  "profileVisibility": "public"
+}
+```
+
+#### 🔒 `PATCH /users/me/settings`
+
+부분 갱신. 응답은 `SettingsResponse` 전체.
+
+| 필드 | 검증 |
+| --- | --- |
+| `weeklyGoalMeters` | 5,000~100,000, 5,000 단위 (앱: 5~100km, 5km 단위) |
+| `distanceUnit` | `km` \| `mi` |
+| `timeZone` | `ZoneId.of()` 로 검증 가능한 IANA 이름 |
+| `notifications.runReminderTime` | `HH:mm` |
+
+> 앱 매핑: `weekly-goal-repository.ts` 의 `getWeeklyGoalKm()` = `weeklyGoalMeters / 1000`,
+> `saveWeeklyGoalKm(km)` = `PATCH { weeklyGoalMeters: km * 1000 }`.
+
+---
+
+### 4.4 러닝 기록 (Runs) — 핵심
+
+#### 🔒 `POST /runs` — 러닝 저장 (러닝 종료 시 / 오프라인 기록 동기화)
+
+헤더 `Idempotency-Key: <clientRunId>` 권장.
+
+```json
+// CreateRunRequest
+{
+  "clientRunId": "local-1792561466354",
+  "startedAt": "2026-10-21T05:00:00Z",
+  "endedAt": "2026-10-21T05:35:12Z",
+  "durationSeconds": 1949,
+  "distanceMeters": 5240,
+  "averagePaceSecondsPerKm": 372,
+  "routePoints": [
+    {
+      "recordedAt": "2026-10-21T05:00:01Z",
+      "latitude": 37.5444,
+      "longitude": 127.0374,
+      "altitudeMeters": 18.2,
+      "accuracyMeters": 6,
+      "speedMetersPerSecond": 2.7
+    }
+  ]
+}
+```
+
+검증:
+
+| 필드 | 규칙 |
+| --- | --- |
+| `clientRunId` | 필수, ≤64자 |
+| `startedAt`/`endedAt` | 필수, `endedAt >= startedAt`, 미래 시각 불가(5분 허용 오차) |
+| `durationSeconds` | 0 ≤ x ≤ `endedAt - startedAt` (일시정지 시간 제외라 더 작을 수 있음), ≤ 24h |
+| `distanceMeters` | 0 ≤ x ≤ 300,000 |
+| `routePoints` | 0~20,000개, lat −90~90, lng −180~180, `recordedAt` 오름차순 |
+
+처리:
+
+1. `(userId, clientRunId)` 가 이미 있으면 → **기존 기록을 `200`으로 반환**(멱등). 내용이 다르면 `409`.
+2. 서버에서 `routePoints`로 거리 재계산(Haversine 합) → 클라이언트 값과 ±10% 이상 차이 나면 로그 남기고 서버 값 사용 여부 결정(초기엔 클라이언트 값 신뢰).
+3. `averagePaceSecondsPerKm` 는 서버가 `durationSeconds / (distanceMeters/1000)` 로 재계산(거리 0이면 null).
+4. `simplified_points`(≤400점) 와 bbox 계산해 `run_routes` 저장.
+5. 한 트랜잭션으로 `runs` + `run_routes` 저장.
+
+응답 `201` (`RunDetailResponse`, 아래 상세와 동일, `route` 포함).
+
+#### 🔒 `GET /runs?cursor=&limit=20` — 기록 목록 (경로 제외)
+
+```json
+// RunListResponse
+{
+  "items": [
+    {
+      "id": "01JB...",
+      "clientRunId": "local-1792561466354",
+      "title": null,
+      "startedAt": "2026-10-21T05:00:00Z",
+      "endedAt": "2026-10-21T05:35:12Z",
+      "durationSeconds": 1949,
+      "distanceMeters": 5240,
+      "averagePaceSecondsPerKm": 372,
+      "routePointCount": 1203
+    }
+  ],
+  "nextCursor": "eyJzIjoiMjAyNi0xMC0yMVQwNTowMDowMFoiLCJpIjoxMjN9"
+}
+```
+
+정렬 `started_at DESC, id DESC`. 커서 = `(started_at, id)` base64. 쿼리:
+`WHERE user_id=? AND deleted_at IS NULL AND (started_at, id) < (?, ?) ORDER BY started_at DESC, id DESC LIMIT ?`
+
+#### 🔒 `GET /runs/{runId}?route=simplified|full|none` — 상세 (기본 `simplified`)
+
+```json
+// RunDetailResponse
+{
+  "id": "01JB...",
+  "clientRunId": "local-1792561466354",
+  "title": null,
+  "startedAt": "2026-10-21T05:00:00Z",
+  "endedAt": "2026-10-21T05:35:12Z",
+  "durationSeconds": 1949,
+  "distanceMeters": 5240,
+  "averagePaceSecondsPerKm": 372,
+  "averageSpeedKmh": 9.7,
+  "routePointCount": 1203,
+  "route": {
+    "type": "simplified",
+    "coordinates": [[37.5444, 127.0374], [37.5450, 127.0381]],
+    "bounds": { "minLat": 37.54, "maxLat": 37.56, "minLng": 127.03, "maxLng": 127.05 }
+  }
+}
+```
+
+앱 지도(`route-geometry.ts` 의 `toRouteCoordinates`)는 이미 400점으로 줄여 쓰므로 `simplified`면 충분합니다.
+`full` 은 GPX 내보내기 등에서만 사용. 본인 기록이 아니면 `404`(존재 여부 노출 방지).
+
+#### 🔒 `PATCH /runs/{runId}` — 제목 수정 (선택 기능)
+
+`{ "title": "한강 저녁 러닝" }` (≤60자) → `RunDetailResponse`.
+
+#### 🔒 `DELETE /runs/{runId}` — 기록 삭제
+
+`204`. 소프트 삭제(`deleted_at = now()`). 앱의 **밀어서 삭제 → 되돌리기(4초)** 는 앱이 4초 지연 후
+DELETE를 보내거나, 아래 복구 API로 처리합니다.
+
+#### 🔒 `POST /runs/{runId}/restore` — 삭제 되돌리기
+
+`200 RunDetailResponse`. 삭제 후 일정 기간(예: 24시간) 내에만 허용.
+
+#### 오프라인/로그인 전 기록 동기화 흐름
+
+```text
+앱: 러닝 종료 → 기기 저장(지금과 동일) → POST /runs 시도
+ ├─ 성공: 기기 기록에 serverId 표시(synced)
+ └─ 실패(오프라인/비로그인): pending 으로 남김 → 앱 시작·로그인·네트워크 복구 시 재전송
+서버: clientRunId 유니크 → 몇 번을 다시 보내도 1건만 저장
+```
+
+---
+
+### 4.5 홈 대시보드
+
+#### 🔒 `GET /dashboard?timeZone=Asia/Seoul`
+
+홈 화면 한 번에 그리기용(오늘 거리 + 이번 주 + 최근 러닝).
+
+```json
+// DashboardResponse
+{
+  "today": { "date": "2026-10-21", "distanceMeters": 5240 },
+  "week": {
     "from": "2026-10-19",
     "to": "2026-10-25",
-    "timeZone": "Asia/Seoul"
+    "goalMeters": 20000,
+    "distanceMeters": 8340,
+    "runCount": 2,
+    "dailyDistances": [2800, 0, 5240, 0, 0, 0, 0]
   },
-  "weeklyGoalMeters": 20000,
-  "weeklyDistanceMeters": 12400,
-  "weeklyRunCount": 3,
-  "dailyDistances": [
-    { "date": "2026-10-19", "distanceMeters": 2800 },
-    { "date": "2026-10-20", "distanceMeters": 0 }
-  ],
   "recentRun": {
-    "id": "run_123",
-    "startedAt": "2026-10-18T22:00:00Z",
+    "id": "01JB...",
+    "startedAt": "2026-10-21T05:00:00Z",
     "distanceMeters": 5240,
     "durationSeconds": 1949,
     "averagePaceSecondsPerKm": 372
@@ -115,446 +560,298 @@ PKCE 사용 여부는 플랫폼과 provider SDK 설정에 맞춰 확정합니다
 }
 ```
 
-기록이 없을 때는 `recentRun: null`, 누락 날짜는 거리 `0`으로 반환하면 앱에서
-빈 화면과 주간 그래프를 일관되게 표시할 수 있습니다. 주간 경계 계산은 요청의
-`timeZone` 기준으로 합니다.
+- `dailyDistances` 는 **월~일 7칸 고정**(기록 없는 날 0). 앱 `getWeeklyInsights()` 와 동일한 규칙.
+- 러닝 시작 화면의 "이번 주 목표 / 최근 러닝" 카드도 이 API를 사용.
 
-## 4. 러닝 기록
+집계 SQL 예시(PostgreSQL):
 
-### `GET /runs?cursor=<cursor>&limit=20`
-
-사용자 러닝 기록 목록. 최신순 정렬과 `nextCursor`를 반환합니다.
-
-응답 예시:
-
-```json
-{
-  "items": [
-    {
-      "id": "run_123",
-      "title": "한강 저녁 러닝",
-      "startedAt": "2026-10-18T09:42:00Z",
-      "distanceMeters": 5240,
-      "durationSeconds": 1949,
-      "averagePaceSecondsPerKm": 372
-    }
-  ],
-  "nextCursor": null
-}
+```sql
+SELECT (started_at AT TIME ZONE :tz)::date AS day,
+       SUM(distance_meters) AS meters, COUNT(*) AS runs
+FROM runs
+WHERE user_id = :uid AND deleted_at IS NULL
+  AND started_at >= :weekStartUtc AND started_at < :weekEndUtc
+GROUP BY day;
 ```
 
-### `POST /runs`
+---
 
-러닝 종료 후 요약과 경로를 서버에 저장합니다. 모바일 네트워크가 끊겨도 기록을
-잃지 않도록 앱은 먼저 기기에 저장하고, 연결 복구 시 동기화하는 흐름을 권장합니다.
-현재 앱 프로토타입은 위치 권한을 받은 뒤 네이티브 백그라운드 작업으로 GPS 위치를
-수집하고 러닝 경로/요약을 기기에 저장합니다. 서버 동기화는 아직 연결되지
-않았습니다. GPS 수집은 Expo Location을 이용하는 앱의 네이티브 기능이며,
-백엔드 API와는 별개입니다. 앱은 화면 잠금 중에도 위치를 수집하도록 OS에
-요청하고 러닝 종료 즉시 해당 작업을 중지합니다. 서버 업로드 시 중복 생성을
-방지하기 위해 `Idempotency-Key` 헤더를 지원합니다.
+### 4.6 통계
+
+#### 🔒 `GET /stats/running?period=week|month&date=2026-10-21&timeZone=Asia/Seoul`
+
+`date` 가 속한 주/월을 집계(기본 오늘). 앱의 주간/월간 탭 + 전체 요약.
 
 ```json
-{
-  "clientRunId": "local-run-uuid",
-  "startedAt": "2026-10-20T05:00:00Z",
-  "endedAt": "2026-10-20T05:32:29Z",
-  "distanceMeters": 5240,
-  "durationSeconds": 1949,
-  "routePoints": [
-    {
-      "sequence": 0,
-      "recordedAt": "2026-10-20T05:00:00Z",
-      "latitude": 37.544,
-      "longitude": 127.037,
-      "altitudeMeters": 18.2,
-      "accuracyMeters": 8,
-      "speedMetersPerSecond": 2.68
-    }
-  ]
-}
-```
-
-서버는 저장된 러닝 `id`, 확정된 요약 값, 생성 시각을 반환합니다. 거리·페이스
-계산의 최종 책임이 클라이언트인지 서버인지 구현 전에 결정해야 합니다. 권장안은
-원시 경로를 보존하고 서버가 검증·재계산한 요약을 돌려주는 방식입니다.
-
-거리 계산은 연속된 유효 GPS 좌표 간 geodesic 거리의 합입니다. 클라이언트는
-정확도가 낮은 위치와 비현실적인 GPS 점프를 제외하지만, 실제 출시 전에 필터링
-기준과 pause 구간, 고도/속도 계산, GPS 오차 표시 정책을 검증해야 합니다. 기기
-센서가 반환한 순간 속도는 네트워크/수신 상태에 따라 null 또는 노이즈가 될 수
-있으므로 원시 속도를 검증하고 서버에서도 요약값을 확인합니다.
-
-#### iOS/Android 권한 및 실행 조건
-
-- 위치 권한은 사용자가 러닝 시작을 누른 시점에 요청합니다. 앱 사용 중(When In Use)
-  위치 권한만으로 기록을 시작하며, 앱에서 시작한 추적은 화면이 잠겨도 iOS 위치
-  표시기/Android Foreground Service로 계속됩니다. Always 권한은 필수가 아닙니다.
-  거부 시 위치 수집을 시작하지 않습니다.
-- Android는 백그라운드 권한 외에 러닝 중 위치 Foreground Service와 지속 알림이
-  필요합니다. iOS는 `location` background mode와 위치 권한 설명이 필요합니다.
-- Expo 설정은 `expo-location` config plugin을 사용합니다. 백그라운드 위치는
-  Expo Go와 웹/PWA에서 지원하지 않으므로 실제 기기용 development/standalone
-  빌드에서 검증해야 합니다.
-- OS가 앱을 종료하거나 제조사 배터리 정책이 적용되면 백그라운드 수집이 중단될 수
-  있습니다. 앱 강제 종료 시 무중단 추적을 보장하지 않습니다.
-- 좌표는 민감한 개인정보입니다. 사용자 동의와 보관·삭제 정책을 마련하고,
-  목적에 필요한 기간만 저장하며, 공개 피드에 공유하는 경로는 기본 비공개로
-  처리합니다. 화면 잠금 중 수집 여부와 수집 중단 상태를 명확히 보여줍니다.
-
-### `GET /runs/{runId}`
-
-러닝 상세와 요약을 조회합니다. 전체 GPS 경로가 필요하면 경로 포함 여부를 쿼리
-옵션으로 분리해 응답 크기를 제한할 수 있습니다.
-
-상세 응답은 목록 필드 외에 `endedAt`, `calories`, `splits`를 포함할 수 있습니다.
-기록 상세의 경로 지도는 `includeRoute=true`일 때만 반환하고, GPS 민감정보를
-최소화합니다.
-
-## 5. 통계
-
-### `GET /stats/running?period=week&timeZone=Asia%2FSeoul`
-
-`period`: `week` 또는 `month`. 기간별 거리·시간·러닝 횟수·평균 페이스와
-그래프에 쓸 일별/주별 집계를 반환합니다.
-
-```json
+// RunningStatsResponse
 {
   "period": "week",
   "from": "2026-10-19",
   "to": "2026-10-25",
-  "timeZone": "Asia/Seoul",
   "totals": {
-    "distanceMeters": 12400,
-    "durationSeconds": 4930,
-    "runCount": 3,
-    "averagePaceSecondsPerKm": 398,
+    "distanceMeters": 8340,
+    "durationSeconds": 3149,
+    "runCount": 2,
+    "averagePaceSecondsPerKm": 378,
     "longestRunMeters": 5240
   },
   "buckets": [
-    { "date": "2026-10-19", "distanceMeters": 2800, "runCount": 1 },
-    { "date": "2026-10-20", "distanceMeters": 0, "runCount": 0 }
-  ]
+    { "label": "월", "from": "2026-10-19", "distanceMeters": 2800, "runCount": 1 }
+  ],
+  "allTime": {
+    "distanceMeters": 8340,
+    "runCount": 2,
+    "averagePaceSecondsPerKm": 378
+  }
 }
 ```
 
-주간/월간 경계는 요청한 `timeZone`의 달력 기준으로 계산합니다. 기록이 없는
-기간에도 `buckets`를 채워 0을 반환합니다.
+- `week`: 버킷 7개(월~일). `month`: 해당 월의 **주 단위** 버킷(앱의 `1주, 2주…`).
+- 평균 페이스 = `SUM(duration) / (SUM(distance)/1000)` (거리 가중 평균, 앱과 동일).
 
-## 6. 소셜 피드와 친구
+---
 
-### `GET /social/feed?cursor=<cursor>&limit=20`
+### 4.7 소셜 — 피드·게시물
 
-내가 팔로우한 사용자의 공개 러닝 게시물을 최신순으로 반환합니다. 비공개 프로필,
-차단, 팔로우 권한은 서버에서 강제해야 합니다.
+#### 🔒 `GET /social/feed?filter=following|public&cursor=&limit=20`
+
+- `following`: 나 + 내가 팔로우(`accepted`)한 사용자의 `public`/`followers` 게시물
+- `public`: 전체 공개 게시물 (추천 탭)
+- 차단 관계(양방향) 제외, `deleted_at IS NULL`
 
 ```json
+// FeedResponse
 {
   "items": [
     {
-      "id": "post_101",
-      "author": {
-        "id": "user_456",
-        "displayName": "지수",
-        "profileImageUrl": null
-      },
-      "createdAt": "2026-10-20T06:30:00Z",
+      "id": "01JB...",
+      "author": { "id": "01JA...", "nickname": "지수", "profileImageUrl": null },
+      "createdAt": "2026-10-21T06:30:00Z",
       "message": "오늘 아침 한강 러닝 완료!",
-      "attachments": [
-        {
-          "id": "asset_122",
-          "url": "https://cdn.example/social/asset_122.jpg",
-          "width": 1200,
-          "height": 1600
-        }
-      ],
+      "visibility": "followers",
+      "media": [{ "id": "01JC...", "url": "https://cdn.../a.jpg", "width": 1200, "height": 1600 }],
       "run": {
-        "id": "run_456",
+        "id": "01JB...",
         "distanceMeters": 5200,
         "durationSeconds": 1910,
-        "averagePaceSecondsPerKm": 368
+        "averagePaceSecondsPerKm": 368,
+        "route": null
       },
       "reactionCount": 12,
-      "reactedByMe": false
+      "reactedByMe": false,
+      "isMine": false
     }
   ],
   "nextCursor": null
 }
 ```
 
-피드의 필터는 `following`(팔로우 계정) 또는 `recommended`(추천 공개 게시물)로
-확장할 수 있습니다. 현재 앱 UI의 “친구”는 상호 승인 관계가 아니라 팔로우 관계를
-뜻하며, 비공개 계정은 요청 수락 후 게시물이 노출되는 방식으로 구분합니다.
+`run.route` 는 게시물의 `show_route = true` 일 때만 simplified 좌표를 포함(위치 노출 방지).
 
-### `GET /social/posts/me?cursor=<cursor>&limit=20`
-
-로그인 사용자가 작성한 게시물을 최신순으로 반환합니다. 본인에게만 공개되는
-게시물도 포함하며, 각 항목에 `visibility`와 공유된 러닝 요약을 반환합니다.
-
-### `DELETE /social/posts/{postId}`
-
-내 게시물을 삭제합니다. 게시물 소유자만 삭제할 수 있어야 합니다. 성공 시
-`{ "success": true }`를 반환하고 연결된 미디어의 보관·정리 정책을 적용합니다.
-
-### `POST /media/uploads`
-
-이미지 업로드용 짧은 수명의 presigned URL을 발급합니다. 앱은 반환된 URL로
-이미지 바이트를 직접 업로드한 뒤 완료 API를 호출합니다. 게시물을 작성하기 전에
-업로드를 완료해야 합니다.
-
-요청:
+#### 🔒 `POST /social/posts`
 
 ```json
-{
-  "fileName": "morning-run.jpg",
-  "contentType": "image/jpeg",
-  "sizeBytes": 1824000,
-  "purpose": "social-post"
-}
-```
-
-응답:
-
-```json
-{
-  "uploadId": "upload_123",
-  "uploadUrl": "https://storage.example/signed-upload-url",
-  "method": "PUT",
-  "requiredHeaders": { "Content-Type": "image/jpeg" },
-  "expiresAt": "2026-10-20T07:00:00Z"
-}
-```
-
-클라이언트는 `uploadUrl`로 바이너리를 `PUT` 업로드한 다음
-`POST /media/uploads/{uploadId}/complete`를 호출합니다. 완료 응답의 `assetId`를
-게시물 요청의 `attachmentIds`에 포함합니다. presigned URL은 짧게 만료시킵니다.
-
-### `POST /media/uploads/{uploadId}/complete`
-
-요청: `{ "checksumSha256": "<optional hex digest>" }`
-
-응답:
-
-```json
-{
-  "assetId": "asset_123",
-  "contentType": "image/jpeg",
-  "url": "https://cdn.example/social/asset_123.jpg",
-  "width": 1200,
-  "height": 1600
-}
-```
-
-서버에서 MIME type·파일 크기·실제 파일 형식을 검증하며, 공개 피드에 게시되기
-전 이미지의 GPS EXIF를 제거합니다. 업로드 실패 시 임시 파일은 정리합니다.
-
-게시물 이미지 정책 초안은 이미지 최대 4장, 장당 최대 10 MB이며, 허용 포맷은
-JPEG, PNG, HEIC/WebP 여부를 앱과 스토리지에서 검증한 뒤 확정합니다.
-
-### `POST /social/posts`
-
-메시지와 이미지를 게시하고, 원하면 완료한 내 러닝도 함께 공유합니다. `runId`는
-선택 사항이며, 제공된 경우 원본 러닝 소유권을 확인합니다. 공개 범위는 매 게시물
-작성 시 `visibility`로 필수 선택하며 서버 기본값에 의존하지 않습니다. 게시물에는
-메시지, 러닝 기록 또는 이미지 중 하나 이상이 있어야 합니다.
-
-요청:
-
-```json
+// CreatePostRequest
 {
   "message": "한강 저녁 러닝 완료!",
   "visibility": "followers",
-  "attachmentIds": ["asset_123", "asset_124"],
-  "runId": "run_123"
+  "mediaIds": ["01JC...", "01JC..."],
+  "runId": "01JB...",
+  "showRoute": false
 }
 ```
 
-응답은 생성된 게시물의 피드 항목을 반환합니다. `visibility`는 `private`,
-`followers`, `public` 중 하나입니다.
+검증: `visibility` 필수, message ≤500자, mediaIds ≤4(본인 소유·`ready` 상태), runId 본인 소유,
+message/media/run 중 최소 하나. 응답 `201` = 피드 항목 1개.
+
+#### 🔒 `GET /social/posts/me?cursor=&limit=20` — 내 게시물
+#### 🔒 `GET /social/users/{userId}/posts?cursor=&limit=20` — 특정 사용자 게시물 (공개 범위·팔로우 확인)
+#### 🔒 `DELETE /social/posts/{postId}` — `204`, 작성자만
+
+#### 🔒 `PUT /social/posts/{postId}/reactions/cheer` / `DELETE` 동일 경로
+
+응원 추가/취소(멱등). 응답 `{ "reactionCount": 13, "reactedByMe": true }`.
+`post_reactions` insert/delete 와 `posts.reaction_count` 증감을 한 트랜잭션에서 처리.
+
+---
+
+### 4.8 미디어 업로드 (게시물 사진·프로필 이미지)
+
+앱 → 서버에 presigned URL 요청 → 앱이 스토리지(S3/Cloudflare R2)로 직접 PUT → 완료 통보.
+
+#### 🔒 `POST /media/uploads`
 
 ```json
-{
-  "id": "post_102",
-  "createdAt": "2026-10-20T06:45:00Z",
-  "message": "한강 저녁 러닝 완료!",
-  "visibility": "followers",
-  "attachments": [
-    {
-      "id": "asset_123",
-      "url": "https://cdn.example/social/asset_123.jpg",
-      "width": 1200,
-      "height": 1600
-    }
-  ],
-  "run": {
-    "id": "run_123",
-    "distanceMeters": 5240,
-    "durationSeconds": 1949,
-    "averagePaceSecondsPerKm": 372
-  },
-  "reactionCount": 0,
-  "reactedByMe": false
+// 요청
+{ "purpose": "social_post", "contentType": "image/jpeg", "sizeBytes": 1824000 }
+// 응답 201
+{ "mediaId": "01JC...", "uploadUrl": "https://...signed", "method": "PUT",
+  "headers": { "Content-Type": "image/jpeg" }, "expiresAt": "2026-10-21T07:00:00Z" }
+```
+
+허용: `image/jpeg`, `image/png`, `image/heic`, `image/webp`, 최대 10MB. URL 유효 5분.
+
+#### 🔒 `POST /media/{mediaId}/complete`
+
+서버가 객체 존재·크기·MIME 확인 → **EXIF(GPS) 제거·리사이즈** → `status = ready`.
+응답 `{ "id", "url", "width", "height" }`. 24시간 내 게시물에 연결 안 된 `pending/ready` 미디어는 배치로 정리.
+
+---
+
+### 4.9 친구(팔로우)·검색·차단
+
+| Method | Path | 설명 |
+| --- | --- | --- |
+| 🔒 GET | `/social/users?query=호성&cursor=&limit=20` | 닉네임/handle 부분 일치(2자 이상, `searchable=true`, 차단 제외) |
+| 🔒 GET | `/social/users/{userId}` | 프로필 카드 (공개 범위에 따라 러닝 통계 노출) |
+| 🔒 POST | `/social/follows/{userId}` | 팔로우. 상대가 `private` 면 `pending`, 아니면 `accepted` |
+| 🔒 DELETE | `/social/follows/{userId}` | 언팔로우 / 보낸 요청 취소 |
+| 🔒 GET | `/social/follows?type=following\|followers&cursor=` | 목록 |
+| 🔒 GET | `/social/follow-requests?cursor=` | 받은 요청(pending) |
+| 🔒 POST | `/social/follow-requests/{userId}/accept` | 수락 |
+| 🔒 DELETE | `/social/follow-requests/{userId}` | 거절 |
+| 🔒 POST / DELETE | `/social/blocks/{userId}` | 차단 / 해제 (차단 시 양방향 follow 삭제) |
+
+사용자 항목 DTO: `{ "id", "nickname", "handle", "profileImageUrl", "followStatus": "none|requested|following|follows_you|mutual" }`
+
+---
+
+### 4.10 푸시 알림 기기 등록
+
+| Method | Path | 설명 |
+| --- | --- | --- |
+| 🔒 POST | `/devices/push-tokens` | `{ "token": "ExponentPushToken[...]", "platform": "ios" }` → upsert, `{ "id", "active": true }` |
+| 🔒 DELETE | `/devices/push-tokens/{id}` | 비활성화 (로그아웃 시) |
+
+발송은 Expo Push API(`https://exp.host/--/api/v2/push/send`) 사용 → APNs/FCM 직접 연동 불필요.
+`DeviceNotRegistered` 응답을 받으면 해당 토큰 `active=false`.
+
+---
+
+## 5. Spring Boot 구현 가이드
+
+### 5.1 의존성
+
+`spring-boot-starter-web`, `-validation`, `-data-jpa`, `-security`, `-oauth2-resource-server`(JWT 검증),
+`postgresql`, `flyway-core`(+ `flyway-database-postgresql`), `hypersistence-utils-hibernate-63`(JSONB 매핑),
+`com.github.f4b6a3:ulid-creator`, `software.amazon.awssdk:s3`(presigned URL), `springdoc-openapi-starter-webmvc-ui`(Swagger).
+
+### 5.2 패키지 구조 (도메인별)
+
+```text
+com.pace
+ ├─ common      (ErrorCode, BusinessException, GlobalExceptionHandler, CursorPage, BaseTimeEntity)
+ ├─ config      (SecurityConfig, JwtConfig, S3Config, JacksonConfig)
+ ├─ auth        (AuthController, AuthService, provider/{Google,Apple,Kakao}Verifier, RefreshToken*)
+ ├─ user        (User, UserSettings, UserController, SettingsController)
+ ├─ run         (Run, RunRoute, RunController, RunService, RouteSimplifier, DistanceCalculator)
+ ├─ stats       (DashboardController, StatsController, StatsQueryRepository)
+ ├─ social      (Post, PostMedia, PostReaction, Follow, Block, FeedService ...)
+ ├─ media       (MediaAsset, MediaController, StorageService, ImageProcessor)
+ └─ device      (DevicePushToken, PushService)
+```
+
+### 5.3 예시 코드 (Run 생성)
+
+```java
+public record RoutePointDto(
+    @NotNull Instant recordedAt,
+    @DecimalMin("-90") @DecimalMax("90") double latitude,
+    @DecimalMin("-180") @DecimalMax("180") double longitude,
+    Double altitudeMeters, Double accuracyMeters, Double speedMetersPerSecond) {}
+
+public record CreateRunRequest(
+    @NotBlank @Size(max = 64) String clientRunId,
+    @NotNull Instant startedAt,
+    @NotNull Instant endedAt,
+    @PositiveOrZero @Max(86_400) int durationSeconds,
+    @PositiveOrZero @Max(300_000) int distanceMeters,
+    Integer averagePaceSecondsPerKm,
+    @NotNull @Size(max = 20_000) List<@Valid RoutePointDto> routePoints) {}
+
+@PostMapping("/runs")
+public ResponseEntity<RunDetailResponse> create(@AuthenticationPrincipal AuthUser me,
+                                                @Valid @RequestBody CreateRunRequest req) {
+  CreateResult r = runService.create(me.id(), req);   // 이미 있으면 created=false
+  return ResponseEntity.status(r.created() ? 201 : 200).body(r.body());
 }
 ```
 
-### `POST /social/posts/{postId}/reactions`
+`RunRoute.points` 는 `@Type(JsonType.class) @Column(columnDefinition = "jsonb") List<StoredPoint>` 로 매핑합니다.
+DB 마이그레이션은 Flyway `V1__init.sql` 에 3장의 DDL을 그대로 사용합니다.
 
-응원(cheer) 반응을 추가합니다. 같은 사용자의 중복 반응은 멱등 처리합니다.
+### 5.4 환경별 설정
 
-요청: `{ "type": "cheer" }`
+| 환경 | 앱 (EAS) | 서버 |
+| --- | --- | --- |
+| development | `EXPO_PUBLIC_API_BASE_URL=http://<내PC IP>:8080/api/v1` | `application-local.yml`, Docker PostgreSQL |
+| preview (TestFlight) | `eas env` preview: `https://api-dev.<도메인>/api/v1` | dev 서버/DB |
+| production | `eas env` production: `https://api.<도메인>/api/v1` | prod 서버/DB |
 
-응답: `{ "reactionCount": 13, "reactedByMe": true }`
+앱은 `process.env.EXPO_PUBLIC_API_BASE_URL` 로 읽습니다. 비밀값(JWT 키, provider secret, S3 키)은
+**서버에만** 두고 앱에는 넣지 않습니다.
 
-### `DELETE /social/posts/{postId}/reactions/cheer`
+---
 
-내 응원을 취소합니다. 응답은 갱신된 `reactionCount`와 `reactedByMe: false`를
-반환합니다.
+## 6. 구현 우선순위
 
-### `GET /social/users?query=<검색어>&cursor=<cursor>&limit=20`
+| 단계 | 범위 | 앱에서 바뀌는 것 |
+| --- | --- | --- |
+| **1. MVP** | Auth(Apple·Kakao·Google) + `GET/PATCH /users/me` + settings + `POST/GET/DELETE /runs` + `/runs/{id}` | 로그인 실제 동작, 기록·목표 서버 저장, 기기 기록 업로드 |
+| 2. 집계 | `/dashboard`, `/stats/running` | 홈·통계를 서버 집계로 (기기 계산은 오프라인 fallback) |
+| 3. 소셜 | media 업로드, posts, feed, reactions | 소셜 탭 목업 제거 |
+| 4. 친구 | follows, 검색, 요청, 차단 | 친구 찾기·관리 |
+| 5. 알림 | push token, 리마인더/주간 리포트 배치 | 설정 토글 실제 동작 |
+| 6. 탈퇴 | `DELETE /users/me` + 삭제 배치 | **App Store 제출 전 필수**(계정 생성이 있는 앱은 앱 내 탈퇴 필수) |
 
-로그인 사용자가 공개 검색을 허용한 프로필 중 `nickname`(닉네임) 또는
-`alias`(별칭)으로 검색합니다. 검색은 대소문자를 구분하지 않는 부분 일치를
-지원합니다. 검색어는 2자 이상이어야 하며, 전화번호나 이메일로 검색하지
-않습니다. 차단된 계정과 검색 비허용 계정은 결과에서 제외합니다.
+---
 
-응답 항목은 친구 요청 UI에 필요한 `userId`, `nickname`, `alias`,
-`profileImageUrl`, `followStatus`를 포함합니다. `followStatus`는
-`none | outgoing_pending | incoming_pending | following` 중 하나이며,
-전화번호·이메일·비공개 프로필의 러닝 기록은 응답하지 않습니다.
+## 7. 화면별 API 연결 표
 
-### `GET /social/follows?type=following|followers&cursor=<cursor>&limit=20`
-
-내 팔로잉 또는 팔로워 목록을 반환합니다. 항목에는 `userId`, 표시명, 프로필
-이미지, `followStatus`를 포함하고 커서 기반으로 페이지를 나눕니다.
-
-### `POST /social/follows` 및 `DELETE /social/follows/{userId}`
-
-요청: `{ "userId": "user_456" }`. 팔로우 요청 응답에 `status` (`pending` 또는
-`following`)와 갱신된 `followerCount`를 반환합니다. 비공개 계정은 승인 전까지
-피드가 노출되지 않습니다.
-
-```json
-{
-  "userId": "user_456",
-  "status": "pending",
-  "followerCount": 84
-}
-```
-
-비공개 계정이 받은 요청을 관리하기 위한 API:
-
-- `GET /social/follow-requests?direction=incoming`: 받은 요청 목록을 조회합니다.
-- `POST /social/follow-requests/{userId}/accept`: 요청을 수락하고 팔로우 관계를
-  활성화합니다.
-- `DELETE /social/follow-requests/{userId}`: 요청을 거절하거나 보낸 대기 요청을
-  취소합니다.
-
-요청 처리 API는 요청 대상 계정만 수락·거절할 수 있도록 권한을 검사합니다.
-
-## 7. 내 프로필 및 앱 설정
-
-### `PATCH /users/me`
-
-표시명, 프로필 이미지, 프로필 공개 범위를 수정합니다. 변경 가능한 필드만
-요청에 포함합니다.
-
-```json
-{
-  "displayName": "PACE 러너",
-  "visibility": "followers"
-}
-```
-
-응답은 최신 사용자 프로필 전체를 반환합니다.
-
-### `GET /users/me/settings`
-
-`weeklyGoalMeters` 기본값은 `20000`이며, `5000`~`100000`m 범위에서
-`5000`m 단위로 설정합니다. 로그인 전 앱은 같은 기준의 목표를 기기에 저장하고,
-계정 연동 후에는 이 설정 API와 동기화합니다.
-
-```json
-{
-  "distanceUnit": "km",
-  "weeklyGoalMeters": 20000,
-  "notifications": {
-    "runReminder": true,
-    "weeklySummary": true
-  },
-  "privateProfile": false
-}
-```
-
-### `PATCH /users/me/settings`
-
-일부 설정을 부분 갱신합니다. 미지원 값은 `400 VALIDATION_ERROR`로 응답합니다.
-`weeklyGoalMeters`는 기본값·범위·단위 검증을 통과해야 합니다.
-
-요청:
-
-```json
-{
-  "distanceUnit": "mi",
-  "weeklyGoalMeters": 25000,
-  "notifications": {
-    "runReminder": false
-  },
-  "privateProfile": true
-}
-```
-
-응답은 수정된 설정 전체를 반환합니다. 앱 설정의 토글은 서버 저장 성공 전에는
-저장 완료 상태로 표시하지 않습니다.
-
-### `POST /devices/push-tokens`
-
-알림을 허용한 기기의 push token을 사용자 계정에 등록하거나 갱신합니다.
-토큰은 기기별로 관리하고, 로그아웃/토큰 무효화 시 삭제합니다.
-
-요청: `{ "token": "<push token>", "platform": "ios" }`
-
-응답: `{ "deviceId": "device_123", "active": true }`
-
-### `DELETE /devices/push-tokens/{deviceId}`
-
-현재 사용자 기기의 push token을 비활성화합니다. 응답은
-`{ "success": true }`입니다.
-
-### `DELETE /users/me`
-
-계정 탈퇴 및 개인정보 삭제를 요청합니다. 로그인 재확인 정책을 적용하고,
-러닝 GPS 원본·게시물·인증 provider 연결의 삭제/익명화 결과와 유예 기간을
-서비스 정책으로 명확히 정의해야 합니다. 응답은 삭제 작업이 비동기라면 `202`
-및 `requestId`를 반환합니다.
-
-## 연동 전에 결정할 사항
-
-1. Google, Kakao, Apple 각각의 OAuth 앱 등록 정보와 허용 redirect URI
-2. access/refresh token 만료 시간, 회전 및 폐기 정책
-3. 소셜 피드의 공개 선택 범위, 비공개 계정 승인, 신고·차단 및 게시물 삭제 정책
-4. 러닝 데이터 보관 기간, 계정 탈퇴 시 기록 및 GPS 경로 삭제 정책
-5. 주간 목표 기본값은 20km이며, 앱에서 5km 단위로 5~100km까지 변경 가능
-6. 거리·페이스 계산, GPS 샘플링 간격 및 비정상 위치값 필터링 기준
-7. 오프라인 동기화 재시도, 중복 요청 처리 및 기록 충돌 정책
-8. 러닝 리마인더 시각, 푸시 토큰 수명 및 알림 수신 거부 처리
-9. 이미지 업로드 최대 크기, 허용 포맷, 보관·삭제 기간 및 CDN 접근 정책
-
-## 화면별 API 연결 요약
-
-| 앱 화면 | 필요한 API |
+| 앱 화면 (파일) | API |
 | --- | --- |
-| 소셜 로그인 | `POST /auth/{provider}`, `POST /auth/refresh`, `POST /auth/logout` |
-| 홈 | `GET /users/me`, `GET /dashboard` |
-| 기록 목록 | `GET /runs` |
-| 기록 상세 | `GET /runs/{runId}` |
-| 통계 | `GET /stats/running` |
-| 소셜 피드 | `GET /social/feed`, media upload API, `POST /social/posts`, reactions API |
-| 친구 찾기/관리 | `GET /social/users`, `GET /social/follows`, `POST /social/follows`, follow request API |
-| 내 소셜 활동 | `GET /social/posts/me`, `DELETE /social/posts/{postId}` |
-| 마이 프로필 | `GET /users/me`, `PATCH /users/me` |
-| 앱 설정 | `GET /users/me/settings`, `PATCH /users/me/settings`, push token API |
-| 계정 삭제 | `DELETE /users/me` |
+| 로그인 (`features/auth/login-screen.tsx`) | `POST /auth/{provider}` |
+| 홈 (`features/home/home-screen.tsx`) | `GET /dashboard` (+ `GET /users/me` 인사말) |
+| 러닝 시작 (`features/running/run-ready-view.tsx`) | `GET /dashboard` |
+| 러닝 중 (`features/running/run-tracking-screen.tsx`) | 없음 (기기). 종료 시 `POST /runs` |
+| 기록 목록 (`features/runs/runs-screen.tsx`) | `GET /runs`, `DELETE /runs/{id}`, `POST /runs/{id}/restore` |
+| 기록 상세 (`features/runs/run-detail-screen.tsx`) | `GET /runs/{id}?route=simplified` |
+| 통계 (`features/stats/stats-screen.tsx`) | `GET /stats/running` |
+| 소셜 (`features/social/*`) | `/social/feed`, `/social/posts`, `/media/*`, reactions |
+| 마이 (`features/profile/profile-screen.tsx`) | `GET /users/me`, `GET /users/me/settings` |
+| 주간 목표 (`features/profile/weekly-goal-screen.tsx`) | `PATCH /users/me/settings` |
+| 설정 (`features/settings/settings-screen.tsx`) | `GET/PATCH /users/me/settings`, push token, `DELETE /users/me`, `POST /auth/logout` |
 
-실제 GPS 수집 기능을 만들기 전에는 위치 권한 안내, 백그라운드 위치 사용,
-배터리 영향, 개인정보 고지와 iOS/Android 플랫폼별 권한 동작도 별도로 설계해야
-합니다. 이 초안에는 특정 OAuth client secret이나 운영 credential을 넣지 않습니다.
+---
+
+## 8. 결정이 필요한 사항
+
+1. 거리 계산 최종 책임: 초기엔 클라이언트 값 저장 + 서버 재계산 값 로그 비교 → 이후 서버 값으로 통일할지
+2. 원본 GPS(`run_routes.points`) 보관 기간 (예: 무기한 vs 1년 후 simplified만 남기기)
+3. 삭제 되돌리기 허용 기간(24시간 제안)과 소프트 삭제 데이터 영구 삭제 주기
+4. 로그인 전 기기 기록을 로그인 시 자동 업로드할지, 사용자에게 물어볼지
+5. 피드 기본 공개 범위(`followers` 제안), 경로 지도 공개 기본값(비공개 제안)
+6. 이미지 스토리지(S3 vs Cloudflare R2 — R2는 전송료 무료)와 CDN 도메인
+7. access/refresh 토큰 만료(30분/30일 제안)
+8. 신고 기능·운영자 관리 범위
+
+---
+
+## 부록 A. 앱 타입 ↔ API 변환
+
+| 앱 (`src/features/running/types.ts`) | API |
+| --- | --- |
+| `CompletedRun.id` (`local-<ms>`) | `clientRunId` (서버 `id`는 별도) |
+| `startedAt`, `endedAt` (epoch ms) | ISO-8601 문자열 (`new Date(ms).toISOString()`) |
+| `distanceMeters` (number) | 정수 (`Math.round`) |
+| `durationSeconds` | 정수 |
+| `averagePaceSecondsPerKm` (`number \| null`) | 동일 |
+| `routePoints[].recordedAt` (ms) | ISO-8601 |
+| 주간 목표 km (`getWeeklyGoalKm`) | `weeklyGoalMeters` (× 1000) |
+
+## 부록 B. MySQL 8 사용 시 차이
+
+- `BIGSERIAL` → `BIGINT AUTO_INCREMENT`, `TIMESTAMPTZ` → `DATETIME(3)` (UTC 저장 규칙 필수), `JSONB` → `JSON`
+- 부분 인덱스(`WHERE deleted_at IS NULL`) 미지원 → 일반 복합 인덱스 `(user_id, deleted_at, started_at)`
+- `CHECK` 는 8.0.16+ 에서 동작, `AT TIME ZONE` 대신 `CONVERT_TZ(started_at, '+00:00', 'Asia/Seoul')` (타임존 테이블 로드 필요)
+- `lower(nickname)` 함수 인덱스는 8.0.13+ (`((lower(nickname)))`), 또는 `utf8mb4_0900_ai_ci` collation으로 대소문자 무시
