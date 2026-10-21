@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from 'react';
+import type { PropsWithChildren, ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,6 +11,7 @@ type TabScreenShellProps = PropsWithChildren<{
   title: string;
   description: string;
   disclaimer?: string;
+  overlay?: ReactNode;
 }>;
 
 export function TabScreenShell({
@@ -18,6 +19,7 @@ export function TabScreenShell({
   title,
   description,
   disclaimer = '화면과 데이터는 백엔드 연동 전 미리보기입니다.',
+  overlay,
   children,
 }: TabScreenShellProps) {
   return (
@@ -43,6 +45,7 @@ export function TabScreenShell({
         {children}
         <Text style={styles.disclaimer}>{disclaimer}</Text>
       </ScrollView>
+      {overlay}
     </SafeAreaView>
   );
 }

@@ -1,16 +1,25 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { PaceErrorDialog, PaceLoadingState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
+import { SwipeToDelete } from '@/components/swipe-to-delete';
 import { PaceColors as C } from '@/constants/pace';
 import { TabScreenShell, tabScreenStyles } from '@/features/navigation/tab-screen-shell';
 import {
   formatPace,
   getWeeklyInsights,
 } from '@/features/running/run-insights';
-import { formatDuration, readCompletedRuns, type CompletedRun } from '@/features/running/run-storage';
+import {
+  deleteCompletedRun,
+  formatDuration,
+  readCompletedRuns,
+  restoreCompletedRun,
+  type CompletedRun,
+} from '@/features/running/run-storage';
+
+const UNDO_DURATION_MS = 4000;
 
 function formatRunDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString('ko-KR', {
@@ -26,6 +35,40 @@ export function RunsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [deletedRun, setDeletedRun] = useState<CompletedRun | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+  }, []);
+
+  const handleDelete = async (run: CompletedRun) => {
+    setCompletedRuns((runs) => runs.filter((item) => item.id !== run.id));
+    try {
+      await deleteCompletedRun(run.id);
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+      setDeletedRun(run);
+      undoTimer.current = setTimeout(() => setDeletedRun(null), UNDO_DURATION_MS);
+    } catch (error) {
+      console.error('Unable to delete run.', error);
+      setCompletedRuns(await readCompletedRuns().catch(() => completedRuns));
+      setErrorMessage('기록을 삭제하지 못했어요. 다시 시도해 주세요.');
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!deletedRun) return;
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    const run = deletedRun;
+    setDeletedRun(null);
+    try {
+      await restoreCompletedRun(run);
+      setCompletedRuns(await readCompletedRuns());
+    } catch (error) {
+      console.error('Unable to restore run.', error);
+      setErrorMessage('기록을 되돌리지 못했어요.');
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -66,7 +109,19 @@ export function RunsScreen() {
       eyebrow="RUN HISTORY"
       title="나의 러닝 기록"
       description="달려온 시간과 거리를 차곡차곡 모아봐요."
-      disclaimer="러닝 기록은 이 기기에 저장됩니다. 계정 동기화는 서버 연동 후 제공돼요.">
+      disclaimer="러닝 기록은 이 기기에 저장됩니다. 계정 동기화는 서버 연동 후 제공돼요."
+      overlay={deletedRun ? (
+        <View style={styles.toast} accessibilityLiveRegion="polite">
+          <Text style={styles.toastText}>러닝 기록을 삭제했어요</Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleUndo}
+            hitSlop={10}
+            style={({ pressed }) => pressed && styles.pressed}>
+            <Text style={styles.toastAction}>되돌리기</Text>
+          </Pressable>
+        </View>
+      ) : null}>
       <View style={styles.summary}>
         <View>
           <Text style={styles.summaryValue}>{weeklyInsights.distanceKm.toFixed(2)}<Text style={styles.summaryUnit}> km</Text></Text>
@@ -77,7 +132,12 @@ export function RunsScreen() {
           <Text style={tabScreenStyles.muted}>이번 주 러닝</Text>
         </View>
       </View>
-      <Text style={styles.sectionTitle}>최근 기록</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>최근 기록</Text>
+        {completedRuns.length > 0 ? (
+          <Text style={styles.sectionHint}>← 밀어서 삭제</Text>
+        ) : null}
+      </View>
       {isLoading ? (
         showSkeleton ? <PaceLoadingState label="러닝 기록을 불러오는 중" /> : null
       ) : completedRuns.length === 0 ? (
@@ -94,9 +154,12 @@ export function RunsScreen() {
           </Pressable>
         </View>
       ) : completedRuns.map((run) => (
-        <Pressable
+        <SwipeToDelete
           key={run.id}
-          accessibilityRole="button"
+          accessibilityLabel={`${formatRunDate(run.startedAt)} 러닝 기록, ${(run.distanceMeters / 1000).toFixed(2)}킬로미터`}
+          onDelete={() => handleDelete(run)}
+          style={[tabScreenStyles.card, styles.runCard]}
+          pressedStyle={styles.pressed}
           onPress={() => router.push({
             pathname: '/run-detail',
             params: {
@@ -109,8 +172,7 @@ export function RunsScreen() {
               durationSeconds: String(run.durationSeconds),
               routePointCount: String(run.routePoints.length),
             },
-          })}
-          style={({ pressed }) => [tabScreenStyles.card, pressed && styles.pressed]}>
+          })}>
           <View style={styles.runHeader}>
             <View>
               <Text style={styles.runDate}>{formatRunDate(run.startedAt)}</Text>
@@ -124,7 +186,7 @@ export function RunsScreen() {
             <Metric label="시간" value={formatDuration(run.durationSeconds)} />
             <Metric label="평균 페이스" value={formatPace(run.averagePaceSecondsPerKm)} unit="/km" />
           </View>
-        </Pressable>
+        </SwipeToDelete>
       ))}
       <PaceErrorDialog
         message={errorMessage}
@@ -160,7 +222,29 @@ const styles = StyleSheet.create({
   summaryUnit: { color: C.accent, fontSize: 13, fontWeight: '500' },
   summaryCount: { alignItems: 'flex-end', justifyContent: 'center' },
   countValue: { color: C.text, fontSize: 20, fontWeight: '700' },
-  sectionTitle: { marginTop: 28, color: C.text, fontSize: 16, fontWeight: '700' },
+  sectionHeader: { marginTop: 28, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  sectionTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
+  sectionHint: { color: C.subtle, fontSize: 9 },
+  runCard: { marginTop: 0 },
+  toast: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    bottom: 16,
+    minHeight: 48,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 14,
+    backgroundColor: C.raised,
+    borderWidth: 1,
+    borderColor: C.border,
+    zIndex: 10,
+    elevation: 8,
+  },
+  toastText: { color: C.text, fontSize: 11 },
+  toastAction: { color: C.accent, fontSize: 11, fontWeight: '700' },
   emptyCard: { alignItems: 'center', paddingVertical: 28 },
   emptyTitle: { color: C.text, fontSize: 13, fontWeight: '700' },
   emptyDescription: { marginTop: 8, color: C.muted, fontSize: 10, lineHeight: 16, textAlign: 'center' },

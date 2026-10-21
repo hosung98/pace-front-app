@@ -104,6 +104,21 @@ export async function readCompletedRuns(): Promise<CompletedRun[]> {
   return stored ? (JSON.parse(stored) as CompletedRun[]) : [];
 }
 
+export async function deleteCompletedRun(runId: string): Promise<void> {
+  const runs = await readCompletedRuns();
+  await AsyncStorage.setItem(
+    COMPLETED_RUNS_KEY,
+    JSON.stringify(runs.filter((run) => run.id !== runId)),
+  );
+}
+
+export async function restoreCompletedRun(run: CompletedRun): Promise<void> {
+  const runs = await readCompletedRuns();
+  if (runs.some((item) => item.id === run.id)) return;
+  const restored = [...runs, run].sort((a, b) => b.startedAt - a.startedAt);
+  await AsyncStorage.setItem(COMPLETED_RUNS_KEY, JSON.stringify(restored));
+}
+
 export async function appendLocationUpdates(
   locations: LocationObject[],
 ): Promise<void> {
