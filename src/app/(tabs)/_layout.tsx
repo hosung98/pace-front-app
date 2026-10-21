@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PaceIcon } from '@/components/pace-icon';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
+import { ActiveRunBanner } from '@/features/running/active-run-banner';
 
 const tabItems = [
   { route: 'runs', label: '기록', icon: 'run' },
@@ -26,53 +27,56 @@ export default function TabsLayout() {
       initialRouteName="main"
       screenOptions={{ headerShown: false, sceneStyle: styles.scene }}
       tabBar={({ state, navigation }) => (
-        <View
-          style={[
-            styles.tabBar,
-            { paddingBottom: Math.max(bottomInset, 8) },
-          ]}>
-          {tabItems.map(({ route, label, icon }) => {
-            const index = state.routes.findIndex((item) => item.name === route);
-            const isActive = state.index === index;
+        <View style={styles.bottom}>
+          <ActiveRunBanner />
+          <View
+            style={[
+              styles.tabBar,
+              { paddingBottom: Math.max(bottomInset, 8) },
+            ]}>
+            {tabItems.map(({ route, label, icon }) => {
+              const index = state.routes.findIndex((item) => item.name === route);
+              const isActive = state.index === index;
 
-            return (
-              <Pressable
-                key={route}
-                accessibilityRole="button"
-                accessibilityLabel={label}
-                accessibilityState={{ selected: isActive }}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
-                    (error: unknown) => {
-                      console.error('Unable to play tab haptic feedback.', error);
-                    },
-                  );
+              return (
+                <Pressable
+                  key={route}
+                  accessibilityRole="button"
+                  accessibilityLabel={label}
+                  accessibilityState={{ selected: isActive }}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
+                      (error: unknown) => {
+                        console.error('Unable to play tab haptic feedback.', error);
+                      },
+                    );
 
-                  const event = navigation.emit({
-                    type: 'tabPress',
-                    target: state.routes[index]?.key,
-                    canPreventDefault: true,
-                  });
+                    const event = navigation.emit({
+                      type: 'tabPress',
+                      target: state.routes[index]?.key,
+                      canPreventDefault: true,
+                    });
 
-                  if (!isActive && !event.defaultPrevented) {
-                    navigation.navigate(route);
-                  }
-                }}
-                style={({ pressed }) => [
-                  styles.tab,
-                  pressed && styles.pressed,
-                ]}>
-                <PaceIcon
-                  name={icon}
-                  size={21}
-                  color={isActive ? C.accent : C.subtle}
-                />
-                <Text style={[styles.label, isActive && styles.activeLabel]}>
-                  {label}
-                </Text>
-              </Pressable>
-            );
-          })}
+                    if (!isActive && !event.defaultPrevented) {
+                      navigation.navigate(route);
+                    }
+                  }}
+                  style={({ pressed }) => [
+                    styles.tab,
+                    pressed && styles.pressed,
+                  ]}>
+                  <PaceIcon
+                    name={icon}
+                    size={21}
+                    color={isActive ? C.accent : C.subtle}
+                  />
+                  <Text style={[styles.label, isActive && styles.activeLabel]}>
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       )}>
       <Tabs.Screen name="runs" />
@@ -86,6 +90,7 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   scene: { backgroundColor: C.background },
+  bottom: { backgroundColor: C.background },
   tabBar: {
     minHeight: 62,
     paddingTop: 8,

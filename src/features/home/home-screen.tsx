@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -6,6 +7,7 @@ import { PaceBrand, PaceMark } from '@/components/pace-brand';
 import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
+import { getActiveRunSnapshot, subscribeToActiveRun } from '@/data/active-run-store';
 import { listCompletedRuns } from '@/data/completed-runs-repository';
 import { getWeeklyGoalKm } from '@/data/weekly-goal-repository';
 import {
@@ -48,6 +50,8 @@ function TodayRunCard({
   onStartRun: () => void;
   distanceKm: number;
 }) {
+  const { run } = useSyncExternalStore(subscribeToActiveRun, getActiveRunSnapshot, getActiveRunSnapshot);
+
   return (
     <View style={styles.todayCard}>
       <View style={styles.todayCardTop}>
@@ -75,7 +79,7 @@ function TodayRunCard({
           styles.startButton,
           pressed && styles.pressed,
         ]}>
-        <Text style={styles.startButtonText}>러닝 시작하기</Text>
+        <Text style={styles.startButtonText}>{run ? '러닝 이어가기' : '러닝 시작하기'}</Text>
         <Text style={styles.startButtonArrow}>→</Text>
       </Pressable>
     </View>

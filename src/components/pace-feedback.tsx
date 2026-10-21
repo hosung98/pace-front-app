@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -6,8 +6,8 @@ import {
   Pressable,
   Platform,
   StyleSheet,
+  useWindowDimensions,
   View,
-  type ViewStyle,
 } from 'react-native';
 
 import { PaceBrand, PaceMark } from '@/components/pace-brand';
@@ -16,8 +16,22 @@ import { PaceColors as C } from '@/constants/pace';
 
 type PaceLoadingStateProps = Readonly<{ label?: string }>;
 
+const MIN_LOADING_OFFSET = 24;
+
+/** Logo + label placed at the vertical center of the window, wherever the state is rendered. */
 export function PaceLoadingState({ label = '불러오는 중' }: PaceLoadingStateProps) {
   const [progress] = useState(() => new Animated.Value(0));
+  const containerRef = useRef<View>(null);
+  const { height: windowHeight } = useWindowDimensions();
+  const [top, setTop] = useState<number | null>(null);
+  const [contentHeight, setContentHeight] = useState(0);
+  const paddingTop = top === null
+    ? MIN_LOADING_OFFSET
+    : Math.max(MIN_LOADING_OFFSET, windowHeight / 2 - top - contentHeight / 2);
+
+  const measureTop = () => {
+    containerRef.current?.measureInWindow((_x, y) => setTop(y));
+  };
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -51,41 +65,19 @@ export function PaceLoadingState({ label = '불러오는 중' }: PaceLoadingStat
 
   return (
     <View
+      ref={containerRef}
       accessibilityRole="progressbar"
       accessibilityLabel={label}
-      style={styles.loading}>
-      <Animated.View style={[styles.loadingLogo, logoStyle]}>
-        <PaceBrand />
-      </Animated.View>
-      <Text style={styles.loadingLabel}>{label}</Text>
-      <View style={styles.skeletonCard}>
-        <SkeletonLine width="44%" height={12} />
-        <SkeletonLine width="72%" height={24} style={styles.skeletonGap} />
-        <View style={styles.skeletonMetrics}>
-          <SkeletonLine width="25%" height={34} />
-          <SkeletonLine width="25%" height={34} />
-          <SkeletonLine width="25%" height={34} />
-        </View>
-      </View>
-      <View style={styles.skeletonCard}>
-        <SkeletonLine width="38%" height={12} />
-        <SkeletonLine width="88%" height={10} style={styles.skeletonGap} />
-        <SkeletonLine width="63%" height={10} style={styles.skeletonGapSmall} />
+      onLayout={measureTop}
+      style={[styles.loading, { paddingTop }]}>
+      <View onLayout={(event) => setContentHeight(event.nativeEvent.layout.height)}>
+        <Animated.View style={[styles.loadingLogo, logoStyle]}>
+          <PaceBrand />
+        </Animated.View>
+        <Text style={styles.loadingLabel}>{label}</Text>
       </View>
     </View>
   );
-}
-
-export function SkeletonLine({
-  width,
-  height,
-  style,
-}: Readonly<{
-  width: `${number}%`;
-  height: number;
-  style?: ViewStyle;
-}>) {
-  return <View style={[styles.skeletonLine, { width, height }, style]} />;
 }
 
 export function PaceErrorDialog({
@@ -123,25 +115,9 @@ export function PaceErrorDialog({
 }
 
 const styles = StyleSheet.create({
-  loading: { gap: 13 },
+  loading: { paddingBottom: MIN_LOADING_OFFSET },
   loadingLogo: { alignSelf: 'center' },
-  loadingLabel: { color: C.muted, fontSize: 11, textAlign: 'center' },
-  skeletonCard: {
-    marginTop: 3,
-    padding: 18,
-    borderRadius: 18,
-    backgroundColor: C.surface,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  skeletonLine: { borderRadius: 8, backgroundColor: C.raised },
-  skeletonGap: { marginTop: 16 },
-  skeletonGapSmall: { marginTop: 9 },
-  skeletonMetrics: {
-    marginTop: 18,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+  loadingLabel: { marginTop: 13, color: C.muted, fontSize: 11, textAlign: 'center' },
   backdrop: {
     flex: 1,
     padding: 28,
