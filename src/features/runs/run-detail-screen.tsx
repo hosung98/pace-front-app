@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -5,6 +6,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PaceBrand } from '@/components/pace-brand';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
+import { readCompletedRuns } from '@/features/running/run-storage';
+import { toRouteCoordinates, type RouteCoordinate } from './route-geometry';
+import { RunRouteMap } from './run-route-map';
+
+const MAP_HEIGHT = 240;
 
 export function RunDetailScreen() {
   const router = useRouter();
@@ -19,6 +25,32 @@ export function RunDetailScreen() {
     routePointCount?: string;
   }>();
   const isRecordedRun = Boolean(params.startedAt);
+  const [route, setRoute] = useState<{ runId: string; coordinates: RouteCoordinate[] } | null>(null);
+
+  useEffect(() => {
+    const runId = params.runId;
+    if (!runId) {
+      return;
+    }
+    let cancelled = false;
+    readCompletedRuns()
+      .then((runs) => {
+        const run = runs.find((item) => item.id === runId);
+        if (!cancelled) {
+          setRoute({ runId, coordinates: run ? toRouteCoordinates(run.routePoints) : [] });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRoute({ runId, coordinates: [] });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [params.runId]);
+
+  const routeCoordinates = route && route.runId === params.runId ? route.coordinates : null;
   const distanceKmParam = Number(params.distance ?? 0);
   const distanceKm = Number.isFinite(distanceKmParam) && distanceKmParam > 0
     ? distanceKmParam
@@ -53,15 +85,23 @@ export function RunDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.mapPlaceholder}>
-          <Text style={styles.mapIcon}>⌁</Text>
-          <Text style={styles.mapTitle}>러닝 경로 미리보기</Text>
-          <Text style={styles.mapCaption}>
-            {isRecordedRun && routePointCount > 0
-              ? `GPS 경로 ${routePointCount}개 지점이 기기에 저장되어 있어요.`
-              : 'GPS 경로를 지도에 표시하는 기능은 추후 추가될 예정이에요.'}
-          </Text>
-        </View>
+        {routeCoordinates && routeCoordinates.length >= 2 ? (
+          <View style={styles.mapWrap}>
+            <RunRouteMap coordinates={routeCoordinates} height={MAP_HEIGHT} />
+          </View>
+        ) : (
+          <View style={styles.mapPlaceholder}>
+            <Text style={styles.mapIcon}>⌁</Text>
+            <Text style={styles.mapTitle}>
+              {routeCoordinates === null && params.runId ? '경로 불러오는 중' : '표시할 경로가 없어요'}
+            </Text>
+            <Text style={styles.mapCaption}>
+              {isRecordedRun
+                ? 'GPS 지점이 2개 이상 기록되면 달린 경로를 지도에 보여드려요.'
+                : '러닝을 완료하면 달린 경로를 지도에서 확인할 수 있어요.'}
+            </Text>
+          </View>
+        )}
         <View style={styles.primaryMetric}>
           <Text style={styles.distance}>{distance}<Text style={styles.unit}> km</Text></Text>
           <Text style={styles.metricLabel}>총 거리</Text>
@@ -107,10 +147,11 @@ const styles = StyleSheet.create({
   eyebrow: { marginTop: 23, color: C.accent, fontSize: 9, fontWeight: '600', letterSpacing: 1.7 },
   title: { marginTop: 8, color: C.text, fontSize: 23, fontWeight: '700' },
   date: { marginTop: 5, color: C.muted, fontSize: 10 },
-  mapPlaceholder: { height: 177, marginTop: 19, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: '#20251B', borderWidth: 1, borderColor: '#303A22' },
+  mapWrap: { marginTop: 19 },
+  mapPlaceholder: { height: MAP_HEIGHT, marginTop: 19, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: '#20251B', borderWidth: 1, borderColor: '#303A22' },
   mapIcon: { color: C.accent, fontSize: 37 },
   mapTitle: { marginTop: 7, color: C.text, fontSize: 12, fontWeight: '600' },
-  mapCaption: { marginTop: 4, color: C.muted, fontSize: 9 },
+  mapCaption: { marginTop: 4, paddingHorizontal: 24, color: C.muted, fontSize: 9, textAlign: 'center' },
   primaryMetric: { marginTop: 22, alignItems: 'center' },
   distance: { color: C.text, fontSize: 42, lineHeight: 48, fontWeight: '700', fontVariant: ['tabular-nums'] },
   unit: { color: C.muted, fontSize: 14, fontWeight: '500' },

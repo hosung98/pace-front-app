@@ -2,7 +2,7 @@
   "expo": {
     "name": "PACE",
     "slug": "pace-front-app",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./public/pwa-512.png",
     "scheme": "pacefrontapp",
@@ -60,7 +60,8 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-maps"
     ],
     "experiments": {
       "baseUrl": "/dev",
