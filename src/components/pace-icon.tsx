@@ -1,6 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 
-type PaceIconName = 'run' | 'stats' | 'home' | 'social' | 'profile' | 'comment' | 'send';
+type PaceIconName = 'run' | 'stats' | 'home' | 'crew' | 'profile';
 
 type PaceIconProps = Readonly<{
   name: PaceIconName;
@@ -42,7 +42,7 @@ export function PaceIcon({ name, color, size = 22 }: PaceIconProps) {
           <View style={[styles.door, line, { width: 3 * scale, height: 6 * scale, bottom: 2 * scale, left: 9.5 * scale }]} />
         </View>
       );
-    case 'social':
+    case 'crew':
       return (
         <View accessible={false} style={{ width: size, height: size }}>
           <View style={[styles.personHead, circle, { width: 7 * scale, height: 7 * scale, top: 2 * scale, left: 3 * scale }]} />
@@ -56,19 +56,6 @@ export function PaceIcon({ name, color, size = 22 }: PaceIconProps) {
         <View accessible={false} style={{ width: size, height: size }}>
           <View style={[styles.personHead, circle, { width: 8 * scale, height: 8 * scale, top: 1 * scale, left: 7 * scale }]} />
           <View style={[styles.profileShoulders, line, { width: 16 * scale, height: 9 * scale, bottom: 1 * scale, left: 3 * scale, borderTopLeftRadius: 9 * scale, borderTopRightRadius: 9 * scale }]} />
-        </View>
-      );
-    case 'comment':
-      return (
-        <View accessible={false} style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-          <View style={[styles.commentBubble, { width: 15 * scale, height: 12 * scale, borderColor: color, borderWidth: 1.7 * scale, borderRadius: 4 * scale }]} />
-          <View style={[styles.commentTail, { borderTopColor: color, borderTopWidth: 2 * scale, borderRightColor: color, borderRightWidth: 2 * scale, bottom: 3 * scale, left: 4 * scale, transform: [{ rotate: '15deg' }] }]} />
-        </View>
-      );
-    case 'send':
-      return (
-        <View accessible={false} style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-          <View style={[styles.sendShape, { borderLeftColor: color, borderLeftWidth: 15 * scale, borderTopWidth: 8 * scale, borderBottomWidth: 8 * scale }]} />
         </View>
       );
   }
@@ -87,7 +74,4 @@ const styles = StyleSheet.create({
   personHead: { position: 'absolute' },
   personShoulder: { position: 'absolute' },
   profileShoulders: { position: 'absolute' },
-  commentBubble: { position: 'absolute', top: 3 },
-  commentTail: { position: 'absolute', width: 5, height: 5, borderBottomWidth: 0, borderLeftWidth: 0 },
-  sendShape: { width: 0, height: 0, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderTopWidth: 8, borderBottomWidth: 8, transform: [{ rotate: '-35deg' }] },
 });

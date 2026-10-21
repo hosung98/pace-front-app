@@ -5,7 +5,7 @@ PACE 앱(Expo/React Native)이 필요로 하는 백엔드 API, DB 테이블, 구
 
 - 대상: Spring Boot 3.x (Java 21), Spring Security + JWT, Spring Data JPA
 - DB: **PostgreSQL 16 기준**으로 작성 (MySQL 8 사용 시 차이는 [부록 B](#부록-b-mysql-8-사용-시-차이))
-- 상태: 초안 v2. 경로·필드명은 구현하면서 확정합니다. 확정되면 앱의 `src/data/*` 저장소
+- 상태: 초안 v3 (소셜 피드 → 크루·대결로 변경). 경로·필드명은 구현하면서 확정합니다. 확정되면 앱의 `src/data/*` 저장소
   함수 내부만 API 호출로 교체합니다.
 
 ---
@@ -20,7 +20,8 @@ PACE 앱(Expo/React Native)이 필요로 하는 백엔드 API, DB 테이블, 구
 | 진행 중인 러닝 | 기기 (`@pace/active-run`) | `src/data/active-run-store.ts` | **기기 유지** (서버 전송 X, 종료 시 `POST /runs`) |
 | 주간 목표 | 기기 (`@pace/weekly-goal-km`) | `src/data/weekly-goal-repository.ts` | `GET/PATCH /users/me/settings` |
 | 홈·통계 집계 | 기기 기록으로 앱에서 계산 | `src/features/running/run-insights.ts` | `GET /dashboard`, `GET /stats/running` |
-| 소셜 피드 게시물·사진 | **목업** (하드코딩 샘플) | `src/features/social/*` | `/social/*`, `/media/*` |
+| 크루 랭킹·크루 상세·멤버 | **목업** (메모리, 앱 재시작 시 초기화) | `src/data/crew-repository.ts` | `/crews/*`, `GET /users/me/crew` |
+| 대결 목록·상세·참가·결과 | **목업** (메모리, 앱 재시작 시 초기화) | `src/data/race-repository.ts` | `/races/*` |
 | 프로필 이름 "PACE 러너" | **목업** | `profile-screen.tsx` | `GET /users/me` |
 | 소셜 로그인 버튼 | **UI만** (실제 인증 없음) | `login-screen.tsx` | `POST /auth/{provider}` |
 | 앱 설정 토글(알림·단위·비공개) | **화면 상태만** (저장 안 됨) | `settings-screen.tsx` | `PATCH /users/me/settings` |
@@ -39,8 +40,8 @@ PACE 앱(Expo/React Native)이 필요로 하는 백엔드 API, DB 테이블, 구
 | 날짜 집계 | 요청의 `timeZone`(IANA, 기본 `Asia/Seoul`) 기준. 주 시작은 **월요일** |
 | 단위 | 거리 `meters`(정수), 시간 `seconds`(정수), 페이스 `secondsPerKm`(정수, 없으면 `null`) |
 | 페이지네이션 | 커서 기반: `?cursor=<opaque>&limit=20` (최대 50) → `{ items, nextCursor }` |
-| 멱등성 | 생성 API(`POST /runs`, `POST /social/posts`)는 `Idempotency-Key` 헤더 지원 |
-| 소프트 삭제 | 러닝·게시물은 `deleted_at` 사용 (복구·감사용), 계정 탈퇴 시 하드 삭제 배치 |
+| 멱등성 | `POST /runs`, `POST /races/{id}/result` 는 `Idempotency-Key` 헤더 지원 (재전송 안전) |
+| 소프트 삭제 | 러닝은 `deleted_at` 사용 (복구·감사용), 계정 탈퇴 시 하드 삭제 배치 |
 
 ### 오류 응답
 
@@ -77,15 +78,16 @@ erDiagram
   users ||--|| user_settings : ""
   users ||--o{ runs : ""
   runs ||--|| run_routes : "GPS 경로(1:1)"
-  users ||--o{ posts : ""
-  posts }o--o| runs : "공유한 러닝(선택)"
-  posts ||--o{ post_media : ""
-  media_assets ||--o{ post_media : ""
   users ||--o{ media_assets : ""
-  posts ||--o{ post_reactions : ""
-  users ||--o{ post_reactions : ""
-  users ||--o{ follows : "follower/followee"
-  users ||--o{ user_blocks : ""
+  crews ||--o{ crew_members : "최대 50명"
+  users ||--o| crew_members : "크루 1개만"
+  crews ||--o{ crew_join_requests : ""
+  users ||--o{ crew_join_requests : ""
+  crews ||--o{ crew_period_stats : "주간/월간 거리 캐시"
+  users ||--o{ races : "방장"
+  races ||--o{ race_participants : "2~20명"
+  users ||--o{ race_participants : ""
+  race_participants }o--o| runs : "결과로 제출한 기록"
   users ||--o{ device_push_tokens : ""
 ```
 
@@ -100,6 +102,9 @@ erDiagram
 2. **러닝 요약값(`distance_meters` 등)은 `runs`에 비정규화**해서 통계를 `SUM/COUNT`로 바로 계산.
 3. **`(user_id, client_run_id)` 유니크** → 오프라인 재전송 시 중복 저장 방지(멱등).
 4. 주간 목표는 `user_settings.weekly_goal_meters`(정수 m). 앱의 km 값 × 1000.
+5. **크루 1개 제한은 `crew_members.user_id` PK로 DB가 보장**. 랭킹은 `crew_period_stats` 캐시 테이블(주/월 × 크루)로 읽기만 하게.
+6. **대결 상태는 시각(`join_deadline_at`, `starts_at`, `ends_at`)으로 결정**되고 스케줄러가 `status` 컬럼을 맞춰 줌.
+   결과는 별도 테이블 없이 `race_participants` 에 `run_id`·`finish_seconds`·`rank` 로 저장.
 
 ---
 
@@ -115,7 +120,7 @@ CREATE TABLE users (
   handle             VARCHAR(30)  UNIQUE,                    -- 검색용 별칭(@id), 선택
   profile_image_url  VARCHAR(500),
   bio                VARCHAR(150),
-  profile_visibility VARCHAR(16)  NOT NULL DEFAULT 'public', -- public | followers | private
+  profile_visibility VARCHAR(16)  NOT NULL DEFAULT 'public', -- public | private (크루·대결에서 기록 노출 범위)
   searchable         BOOLEAN      NOT NULL DEFAULT TRUE,
   status             VARCHAR(16)  NOT NULL DEFAULT 'active', -- active | deleting | deleted
   created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -158,7 +163,8 @@ CREATE TABLE user_settings (
   notify_run_reminder         BOOLEAN     NOT NULL DEFAULT TRUE,
   notify_weekly_summary       BOOLEAN     NOT NULL DEFAULT TRUE,
   run_reminder_time           TIME,                                -- 예: 07:00 (선택)
-  default_post_visibility     VARCHAR(16) NOT NULL DEFAULT 'followers',
+  notify_race                 BOOLEAN     NOT NULL DEFAULT TRUE,   -- 대결 확정/취소/출발/결과 푸시
+  notify_crew                 BOOLEAN     NOT NULL DEFAULT TRUE,   -- 가입 신청·승인 푸시
   updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -198,7 +204,7 @@ CREATE TABLE media_assets (
   id            BIGSERIAL PRIMARY KEY,
   public_id     CHAR(26)     NOT NULL UNIQUE,
   owner_id      BIGINT       NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  purpose       VARCHAR(20)  NOT NULL,              -- social_post | profile_image
+  purpose       VARCHAR(20)  NOT NULL,              -- profile_image | crew_image
   storage_key   VARCHAR(300) NOT NULL,              -- S3/R2 object key
   content_type  VARCHAR(50)  NOT NULL,
   size_bytes    INT          NOT NULL,
@@ -208,55 +214,104 @@ CREATE TABLE media_assets (
 );
 CREATE INDEX idx_media_owner_status ON media_assets (owner_id, status);
 
-CREATE TABLE posts (
-  id              BIGSERIAL PRIMARY KEY,
-  public_id       CHAR(26)     NOT NULL UNIQUE,
-  author_id       BIGINT       NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  run_id          BIGINT       REFERENCES runs(id) ON DELETE SET NULL,
-  message         VARCHAR(500),
-  visibility      VARCHAR(16)  NOT NULL,             -- private | followers | public
-  show_route      BOOLEAN      NOT NULL DEFAULT FALSE, -- 경로 지도 공개 여부(기본 비공개)
-  reaction_count  INT          NOT NULL DEFAULT 0,   -- 비정규화 카운터
-  created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
-  updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
-  deleted_at      TIMESTAMPTZ
+-- ─────────────── 크루 ───────────────
+CREATE TABLE crews (
+  id                BIGSERIAL PRIMARY KEY,
+  public_id         CHAR(26)     NOT NULL UNIQUE,
+  name              VARCHAR(20)  NOT NULL,
+  intro             VARCHAR(100),
+  image_media_id    BIGINT       REFERENCES media_assets(id) ON DELETE SET NULL,
+  leader_id         BIGINT       NOT NULL REFERENCES users(id),
+  invite_code       VARCHAR(12)  NOT NULL UNIQUE,      -- 크루장이 재발급하면 교체 (이전 코드 즉시 무효)
+  max_members       SMALLINT     NOT NULL DEFAULT 50 CHECK (max_members BETWEEN 2 AND 200),
+  member_count      SMALLINT     NOT NULL DEFAULT 1,   -- 비정규화 (가입/탈퇴 트랜잭션에서 증감)
+  status            VARCHAR(16)  NOT NULL DEFAULT 'active', -- active | disbanded
+  created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  disbanded_at      TIMESTAMPTZ
 );
-CREATE INDEX idx_posts_author_created ON posts (author_id, created_at DESC) WHERE deleted_at IS NULL;
-CREATE INDEX idx_posts_public_created ON posts (created_at DESC)
-  WHERE deleted_at IS NULL AND visibility = 'public';
+CREATE UNIQUE INDEX uq_crews_name_active ON crews (lower(name)) WHERE status = 'active';
 
-CREATE TABLE post_media (
-  post_id     BIGINT   NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-  media_id    BIGINT   NOT NULL REFERENCES media_assets(id),
-  sort_order  SMALLINT NOT NULL,                    -- 0~3 (최대 4장)
-  PRIMARY KEY (post_id, media_id)
+-- PK 가 user_id → "한 사람은 크루 하나만" 을 DB가 보장
+CREATE TABLE crew_members (
+  user_id     BIGINT      PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  crew_id     BIGINT      NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+  role        VARCHAR(8)  NOT NULL DEFAULT 'member',   -- leader | member
+  joined_at   TIMESTAMPTZ NOT NULL DEFAULT now()       -- 이 시각 이후 러닝만 크루 거리에 합산
 );
+CREATE INDEX idx_crew_members_crew ON crew_members (crew_id, joined_at);
 
-CREATE TABLE post_reactions (
-  post_id     BIGINT      NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-  user_id     BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type        VARCHAR(16) NOT NULL DEFAULT 'cheer',
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (post_id, user_id, type)
-);
-
-CREATE TABLE follows (
-  follower_id  BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  followee_id  BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  status       VARCHAR(16) NOT NULL,                -- pending | accepted
+CREATE TABLE crew_join_requests (
+  id           BIGSERIAL PRIMARY KEY,
+  public_id    CHAR(26)    NOT NULL UNIQUE,
+  crew_id      BIGINT      NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+  user_id      BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  message      VARCHAR(100),
+  status       VARCHAR(16) NOT NULL DEFAULT 'pending', -- pending | approved | rejected | cancelled | expired
+  decided_by   BIGINT      REFERENCES users(id),
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  accepted_at  TIMESTAMPTZ,
-  PRIMARY KEY (follower_id, followee_id),
-  CHECK (follower_id <> followee_id)
+  decided_at   TIMESTAMPTZ
 );
-CREATE INDEX idx_follows_followee ON follows (followee_id, status);
+-- 같은 크루에 대기 중 신청은 1건. (여러 크루에 동시에 신청 가능, 한 곳이 승인되면 나머지는 expired)
+CREATE UNIQUE INDEX uq_crew_join_pending ON crew_join_requests (crew_id, user_id) WHERE status = 'pending';
+CREATE INDEX idx_crew_join_user_pending ON crew_join_requests (user_id) WHERE status = 'pending';
 
-CREATE TABLE user_blocks (
-  blocker_id  BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  blocked_id  BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (blocker_id, blocked_id)
+-- 랭킹 캐시. POST/DELETE /runs 트랜잭션에서 증감 + 매일 새벽 재계산 배치로 보정
+CREATE TABLE crew_period_stats (
+  period_type      VARCHAR(8)  NOT NULL,              -- week | month
+  period_start     DATE        NOT NULL,              -- Asia/Seoul 기준 주(월요일)/월 시작일
+  crew_id          BIGINT      NOT NULL REFERENCES crews(id) ON DELETE CASCADE,
+  distance_meters  BIGINT      NOT NULL DEFAULT 0,
+  run_count        INT         NOT NULL DEFAULT 0,
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (period_type, period_start, crew_id)
 );
+CREATE INDEX idx_crew_period_rank ON crew_period_stats (period_type, period_start, distance_meters DESC);
+
+-- ─────────────── 대결 ───────────────
+CREATE TABLE races (
+  id                 BIGSERIAL PRIMARY KEY,
+  public_id          CHAR(26)     NOT NULL UNIQUE,
+  host_id            BIGINT       NOT NULL REFERENCES users(id),
+  title              VARCHAR(30)  NOT NULL,
+  distance_meters    INT          NOT NULL CHECK (distance_meters BETWEEN 1000 AND 42195),
+  starts_at          TIMESTAMPTZ  NOT NULL,
+  join_deadline_at   TIMESTAMPTZ  NOT NULL,             -- starts_at - N분. 이 시점에 최소 인원 판정
+  ends_at            TIMESTAMPTZ  NOT NULL,             -- starts_at + 제한 시간(km당 12분). 이후 결과 확정
+  min_participants   SMALLINT     NOT NULL CHECK (min_participants >= 2),
+  max_participants   SMALLINT     NOT NULL CHECK (max_participants <= 20),
+  participant_count  SMALLINT     NOT NULL DEFAULT 1,   -- 비정규화 (방장 포함)
+  visibility         VARCHAR(8)   NOT NULL DEFAULT 'public', -- public | private
+  invite_code        VARCHAR(12)  UNIQUE,               -- private 일 때만
+  status             VARCHAR(16)  NOT NULL DEFAULT 'recruiting',
+                     -- recruiting | confirmed | live | finished | cancelled
+  cancel_reason      VARCHAR(24),                       -- not_enough_participants | host_cancelled
+  created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  version            BIGINT       NOT NULL DEFAULT 0,   -- JPA @Version (참가/스케줄러 동시 수정 방지)
+  CHECK (max_participants >= min_participants),
+  CHECK (join_deadline_at < starts_at AND starts_at < ends_at),
+  CHECK (visibility = 'public' OR invite_code IS NOT NULL)
+);
+CREATE INDEX idx_races_open ON races (starts_at) WHERE status = 'recruiting' AND visibility = 'public';
+CREATE INDEX idx_races_deadline ON races (join_deadline_at) WHERE status = 'recruiting';   -- 스케줄러
+CREATE INDEX idx_races_start ON races (starts_at) WHERE status = 'confirmed';             -- 스케줄러
+CREATE INDEX idx_races_end ON races (ends_at) WHERE status = 'live';                      -- 스케줄러
+
+CREATE TABLE race_participants (
+  race_id              BIGINT      NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+  user_id              BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  joined_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  status               VARCHAR(16) NOT NULL DEFAULT 'joined', -- joined | finished | dnf | disqualified
+  run_id               BIGINT      REFERENCES runs(id) ON DELETE SET NULL,
+  finish_seconds       INT,                              -- 출발(starts_at) → 목표 거리 도달까지
+  distance_meters      INT,                              -- 미완주자는 달린 거리
+  rank                 SMALLINT,                         -- 결과 확정 시 기록
+  result_submitted_at  TIMESTAMPTZ,
+  flag_reason          VARCHAR(40),                      -- 이상치 감지 사유 (예: speed_over_limit)
+  PRIMARY KEY (race_id, user_id)
+);
+CREATE INDEX idx_race_participants_user ON race_participants (user_id, joined_at DESC);
 
 CREATE TABLE device_push_tokens (
   id            BIGSERIAL PRIMARY KEY,
@@ -357,7 +412,8 @@ refresh token은 **매번 회전**, 이미 사용된 토큰이 다시 오면 같
   "profileVisibility": "public",
   "linkedProviders": ["kakao", "apple"],
   "createdAt": "2026-10-21T05:00:00Z",
-  "counts": { "runs": 12, "followers": 3, "following": 5 }
+  "counts": { "runs": 12 },
+  "crew": { "id": "01JD...", "name": "새벽 한강 러너스", "role": "member" }   // 없으면 null
 }
 ```
 
@@ -365,14 +421,15 @@ refresh token은 **매번 회전**, 이미 사용된 토큰이 다시 오면 같
 
 ```json
 // UpdateMeRequest (모든 필드 선택)
-{ "nickname": "호성", "handle": "hosung", "bio": "주 3회 러너", "profileImageId": "01JB...", "profileVisibility": "followers" }
+{ "nickname": "호성", "handle": "hosung", "bio": "주 3회 러너", "profileImageId": "01JB...", "profileVisibility": "public" }
 ```
 
 검증: nickname 2~30자, handle `^[a-z0-9_.]{3,30}$` 유니크(409), bio ≤150자. 응답: `MeResponse`.
 
 #### 🔒 `DELETE /users/me` — 회원 탈퇴
 
-`202 { "requestId": "..." }`. `users.status = 'deleting'` → 토큰 전부 폐기 → 배치가 러닝·경로·게시물·미디어(스토리지 포함) 하드 삭제.
+`202 { "requestId": "..." }`. `users.status = 'deleting'` → 토큰 전부 폐기 → 배치가 러닝·경로·미디어(스토리지 포함) 하드 삭제.
+크루장이면 가장 오래된 멤버에게 자동 위임(혼자면 해체), 참가 예정 대결은 참가 취소·방장인 대결은 취소 처리.
 Apple 로그인 사용자는 Apple `revoke` API 호출 필요(App Store 심사 요구사항).
 
 ---
@@ -387,8 +444,8 @@ Apple 로그인 사용자는 Apple `revoke` API 호출 필요(App Store 심사 �
   "weeklyGoalMeters": 20000,
   "distanceUnit": "km",
   "timeZone": "Asia/Seoul",
-  "notifications": { "runReminder": true, "weeklySummary": true, "runReminderTime": "07:00" },
-  "defaultPostVisibility": "followers",
+  "notifications": { "runReminder": true, "weeklySummary": true, "runReminderTime": "07:00",
+                     "race": true, "crew": true },
   "profileVisibility": "public"
 }
 ```
@@ -611,71 +668,261 @@ GROUP BY day;
 
 ---
 
-### 4.7 소셜 — 피드·게시물
+### 4.7 크루 (Crew) — 주간·월간 거리 랭킹
 
-#### 🔒 `GET /social/feed?filter=following|public&cursor=&limit=20`
+**규칙**
 
-- `following`: 나 + 내가 팔로우(`accepted`)한 사용자의 `public`/`followers` 게시물
-- `public`: 전체 공개 게시물 (추천 탭)
-- 차단 관계(양방향) 제외, `deleted_at IS NULL`
+- 한 사용자는 **크루 1개만** 가입 (`crew_members.user_id` PK). 가입된 상태에서 가입/생성 요청 → `409 ALREADY_IN_CREW`.
+- 가입 방법 2가지: ① 가입 신청 → 크루장 승인 ② 초대 코드 입력(즉시 가입).
+- 크루 거리 = 멤버들의 러닝 거리 합. **멤버별 `joined_at` 이후 시작한 러닝만** 합산 (크루를 옮겨 다니며 거리 몰아주기 방지).
+- 기간: `week` = Asia/Seoul 월요일 00:00 ~ 다음 월요일 00:00, `month` = 매월 1일 00:00 ~.
+- 정원 50명(`CREW_MAX_MEMBERS`), 이름 1~20자(활성 크루 중 중복 불가), 소개 ≤100자.
+- 크루장은 다른 멤버가 남아 있으면 탈퇴 불가 → 위임 후 탈퇴, 혼자면 탈퇴 = 해체.
+
+#### 🔒 `GET /crews/rankings?period=week|month&cursor=&limit=20` — 크루 랭킹 (크루 탭)
 
 ```json
-// FeedResponse
+// CrewRankingResponse
 {
+  "period": "week",
+  "periodStart": "2026-10-19",          // Asia/Seoul 기준 시작일
+  "periodEnd": "2026-10-26",            // 미포함
   "items": [
     {
-      "id": "01JB...",
-      "author": { "id": "01JA...", "nickname": "지수", "profileImageUrl": null },
-      "createdAt": "2026-10-21T06:30:00Z",
-      "message": "오늘 아침 한강 러닝 완료!",
-      "visibility": "followers",
-      "media": [{ "id": "01JC...", "url": "https://cdn.../a.jpg", "width": 1200, "height": 1600 }],
-      "run": {
-        "id": "01JB...",
-        "distanceMeters": 5200,
-        "durationSeconds": 1910,
-        "averagePaceSecondsPerKm": 368,
-        "route": null
-      },
-      "reactionCount": 12,
-      "reactedByMe": false,
-      "isMine": false
+      "rank": 1,
+      "crew": { "id": "01JD...", "name": "새벽 한강 러너스", "imageUrl": null },
+      "memberCount": 12,
+      "distanceMeters": 184200,
+      "isMine": true
     }
   ],
+  "myCrew": { "rank": 1, "crewId": "01JD...", "distanceMeters": 184200 }, // 크루 없으면 null
   "nextCursor": null
 }
 ```
 
-`run.route` 는 게시물의 `show_route = true` 일 때만 simplified 좌표를 포함(위치 노출 방지).
+- 정렬: `distance_meters DESC, member_count ASC, crew_id ASC` (동점 처리 고정). 거리 0인 크루도 포함(맨 뒤).
+- `crew_period_stats` 에서 읽음. 캐시 미스 시 아래 SQL로 계산.
 
-#### 🔒 `POST /social/posts`
+```sql
+-- 주간 크루 거리 (period_start = 이번 주 월요일, Asia/Seoul)
+SELECT cm.crew_id, SUM(r.distance_meters) AS distance_meters, COUNT(*) AS run_count
+FROM crew_members cm
+JOIN runs r ON r.user_id = cm.user_id
+WHERE r.deleted_at IS NULL
+  AND r.started_at >= cm.joined_at
+  AND r.started_at >= (:periodStart::timestamp AT TIME ZONE 'Asia/Seoul')
+  AND r.started_at <  (:periodEnd::timestamp   AT TIME ZONE 'Asia/Seoul')
+GROUP BY cm.crew_id;
+```
+
+> 캐시 갱신: `POST /runs`(작성자가 크루 멤버이고 `started_at >= joined_at`이면 해당 week/month 행 `+distance`),
+> `DELETE /runs`·restore 시 반대로 증감. 탈퇴한 멤버의 이번 기간 거리는 **크루에서 빠짐**(배치 재계산 결과와 일치시키기 위해).
+
+#### 🔒 `GET /users/me/crew` — 내 크루
+
+`200 { "crewId": "01JD...", "role": "leader", "joinedAt": "..." }` 또는 `200 null`.
+대기 중 가입 신청 목록도 함께: `"pendingRequests": [{ "crewId", "crewName", "requestedAt" }]`.
+
+#### 🔒 `GET /crews/{crewId}?period=week|month` — 크루 상세
 
 ```json
-// CreatePostRequest
+// CrewDetailResponse
 {
-  "message": "한강 저녁 러닝 완료!",
-  "visibility": "followers",
-  "mediaIds": ["01JC...", "01JC..."],
-  "runId": "01JB...",
-  "showRoute": false
+  "id": "01JD...",
+  "name": "새벽 한강 러너스",
+  "intro": "평일 새벽 6시 한강에서 같이 달려요",
+  "imageUrl": null,
+  "leader": { "id": "01JA...", "nickname": "지수" },
+  "memberCount": 12,
+  "maxMembers": 50,
+  "createdAt": "2026-09-01T00:00:00Z",
+  "period": "week",
+  "rank": 1,
+  "distanceMeters": 184200,
+  "myMembership": "member",          // none | pending | member | leader
+  "inviteCode": "HANRIVER",          // 크루장에게만, 그 외 null
+  "pendingRequestCount": 2           // 크루장에게만, 그 외 null
 }
 ```
 
-검증: `visibility` 필수, message ≤500자, mediaIds ≤4(본인 소유·`ready` 상태), runId 본인 소유,
-message/media/run 중 최소 하나. 응답 `201` = 피드 항목 1개.
+#### 🔒 `GET /crews/{crewId}/members/stats?period=week|month` — 멤버별 거리 (크루 상세 하단)
 
-#### 🔒 `GET /social/posts/me?cursor=&limit=20` — 내 게시물
-#### 🔒 `GET /social/users/{userId}/posts?cursor=&limit=20` — 특정 사용자 게시물 (공개 범위·팔로우 확인)
-#### 🔒 `DELETE /social/posts/{postId}` — `204`, 작성자만
+```json
+{
+  "items": [
+    { "user": { "id": "01JA...", "nickname": "페이서", "profileImageUrl": null },
+      "role": "member", "joinedAt": "...", "distanceMeters": 32400, "runCount": 4, "isMe": true }
+  ]
+}
+```
 
-#### 🔒 `PUT /social/posts/{postId}/reactions/cheer` / `DELETE` 동일 경로
+거리 내림차순. **비멤버에게 공개할지**는 8장 결정 사항(기본안: 비멤버는 닉네임·거리만, 멤버 수 30명 이하 전체).
 
-응원 추가/취소(멱등). 응답 `{ "reactionCount": 13, "reactedByMe": true }`.
-`post_reactions` insert/delete 와 `posts.reaction_count` 증감을 한 트랜잭션에서 처리.
+#### 크루 관리
+
+| Method | Path | 설명 |
+| --- | --- | --- |
+| 🔒 POST | `/crews` | 생성 `{ "name", "intro", "imageMediaId"? }` → `201 CrewDetailResponse`. 생성자는 leader, 초대 코드 자동 발급 |
+| 🔒 GET | `/crews?query=한강&cursor=` | 이름 검색(2자 이상, `active`만) — 가입 신청할 크루 찾기 |
+| 🔒 PATCH | `/crews/{crewId}` | 크루장만. 이름·소개·이미지 수정 |
+| 🔒 DELETE | `/crews/{crewId}` | 크루장만, 본인 혼자일 때 해체 (`status = disbanded`) |
+| 🔒 POST | `/crews/{crewId}/invite-code` | 크루장만. 초대 코드 재발급 → `{ "inviteCode": "K3J9QX" }` |
+| 🔒 PUT | `/crews/{crewId}/leader` | 크루장 위임 `{ "userId" }` (대상은 멤버여야 함) |
+| 🔒 DELETE | `/crews/{crewId}/members/{userId}` | 크루장이 멤버 내보내기 |
+| 🔒 DELETE | `/crews/{crewId}/members/me` | 탈퇴. 크루장+다른 멤버 있으면 `409 LEADER_MUST_TRANSFER` |
+
+#### 가입
+
+| Method | Path | 설명 |
+| --- | --- | --- |
+| 🔒 POST | `/crews/join-by-code` | `{ "code": "HANRIVER" }` → 즉시 가입, `200 CrewDetailResponse`. 없는 코드 `404 INVALID_INVITE_CODE`, 정원 초과 `409 CREW_FULL` |
+| 🔒 POST | `/crews/{crewId}/join-requests` | 가입 신청 `{ "message"? }` → `201`. 이미 신청 중 `409` |
+| 🔒 DELETE | `/crews/{crewId}/join-requests/me` | 내 신청 취소 |
+| 🔒 GET | `/crews/{crewId}/join-requests?status=pending` | 크루장만. 받은 신청 목록 |
+| 🔒 POST | `/crews/{crewId}/join-requests/{requestId}/approve` | 승인 → `crew_members` insert. 신청자가 그새 다른 크루에 가입했으면 `409` |
+| 🔒 POST | `/crews/{crewId}/join-requests/{requestId}/reject` | 거절 |
+
+가입·승인·탈퇴는 한 트랜잭션에서 `crew_members` insert/delete + `crews.member_count` 증감
+(`SELECT ... FOR UPDATE` 로 정원 경쟁 방지). 가입이 확정되면 그 사용자의 다른 `pending` 신청은 `expired`.
 
 ---
 
-### 4.8 미디어 업로드 (게시물 사진·프로필 이미지)
+### 4.8 대결 (Race) — 같은 시각 출발 원격 레이스
+
+**규칙**
+
+- 참가자들은 **각자 위치에서 같은 시각(`startsAt`)에 동시 출발**. 실시간 위치 공유 없음(WebSocket 불필요).
+- 순위 = **목표 거리 도달 시간**(`finishSeconds`) 오름차순. 제한 시간(km당 12분, 5km면 60분) 안에 못 끝내면 `DNF`.
+- 참가 마감 = 출발 N분 전(10·30·60 중 선택). **마감 시점에 최소 인원 미달이면 자동 취소**.
+- 앱은 출발 10초 전 카운트다운 → `startsAt` 에 러닝 자동 시작 → 목표 거리 도달 시 자동 종료 후 결과 제출.
+- 인원 2~20명, 거리 3K·5K·10K·하프(21,097m). 공개(목록 노출) / 비공개(초대 코드로만 참가).
+
+**상태 전이** (서버 스케줄러가 시각 기준으로 변경, 앱은 표시용으로 같은 계산을 함 — `race-status.ts`)
+
+```text
+recruiting ──(마감 시각, 인원 ≥ min)──▶ confirmed ──(startsAt)──▶ live ──(endsAt)──▶ finished
+     │                                     
+     ├──(마감 시각, 인원 < min)──▶ cancelled (not_enough_participants)
+     └──(방장 취소)──────────────▶ cancelled (host_cancelled)
+```
+
+#### 🔒 `GET /races?scope=open|mine&cursor=&limit=20` — 대결 목록 (대결 탭)
+
+- `open`: `status = recruiting AND visibility = public AND join_deadline_at > now()`, 출발 임박 순. 내가 참가한 대결 제외.
+- `mine`: 내가 방장이거나 참가한 대결. 다가오는 것(출발 오름차순) → 지난 것(최신순).
+
+```json
+// RaceSummary
+{
+  "id": "01JE...",
+  "title": "퇴근 후 5K 한 판",
+  "distanceMeters": 5000,
+  "startsAt": "2026-10-21T10:00:00Z",
+  "joinDeadlineAt": "2026-10-21T09:30:00Z",
+  "endsAt": "2026-10-21T11:00:00Z",
+  "minParticipants": 3,
+  "maxParticipants": 10,
+  "participantCount": 2,
+  "visibility": "public",
+  "status": "recruiting",
+  "cancelReason": null,
+  "host": { "id": "01JA...", "nickname": "민준" },
+  "isJoined": false,
+  "isHost": false,
+  "myResult": null                 // 종료된 대결: { "rank": 2, "finishSeconds": 1650, "status": "finished" }
+}
+```
+
+#### 🔒 `POST /races` — 대결 만들기
+
+```json
+// CreateRaceRequest
+{
+  "title": "오늘 저녁 7시 5K",
+  "distanceMeters": 5000,
+  "startsAt": "2026-10-21T10:00:00Z",
+  "joinDeadlineMinutes": 30,
+  "minParticipants": 3,
+  "maxParticipants": 10,
+  "visibility": "private"
+}
+```
+
+검증: `distanceMeters ∈ {3000, 5000, 10000, 21097}`, `joinDeadlineMinutes ∈ {10, 30, 60}`,
+`2 ≤ min ≤ max ≤ 20`, `startsAt - joinDeadlineMinutes ≥ now + 5분`, `startsAt ≤ now + 7일`, 출발 시각은 10분 단위.
+서버가 `join_deadline_at`, `ends_at`(= startsAt + distanceKm × 12분), private면 `invite_code` 생성. 방장은 자동 참가.
+같은 시간대에 이미 참가한 대결이 겹치면 `409 RACE_TIME_CONFLICT`. 응답 `201 RaceDetailResponse`.
+
+#### 🔒 `GET /races/{raceId}` — 대결 상세
+
+`RaceSummary` + 아래 필드. 비공개 대결은 참가자·방장만 조회 가능(그 외 `404`).
+
+```json
+{
+  "inviteCode": "NIGHT5",          // 방장에게만, 모집 중일 때
+  "participants": [
+    { "user": { "id": "01JA...", "nickname": "민준", "profileImageUrl": null },
+      "isHost": true, "joinedAt": "...",
+      "result": { "rank": 1, "status": "finished", "finishSeconds": 1520, "distanceMeters": 5000,
+                  "averagePaceSecondsPerKm": 304 } }   // finished 전에는 null
+  ],
+  "serverNow": "2026-10-21T09:58:12Z"   // 카운트다운 기기 시계 보정용
+}
+```
+
+#### 참가·취소
+
+| Method | Path | 설명 |
+| --- | --- | --- |
+| 🔒 POST | `/races/{raceId}/participants` | 참가. `recruiting` + 마감 전 + 정원 미만만. 공개 대결용. 오류: `409 RACE_FULL` / `RACE_CLOSED` / `RACE_TIME_CONFLICT` |
+| 🔒 POST | `/races/join-by-code` | `{ "code": "NIGHT5" }` → 참가 후 `RaceDetailResponse`. 없는 코드 `404 INVALID_INVITE_CODE` |
+| 🔒 DELETE | `/races/{raceId}/participants/me` | 참가 취소. 마감 전까지만, 방장은 불가(→ 대결 취소) |
+| 🔒 POST | `/races/{raceId}/cancel` | 방장만, `recruiting`/`confirmed` 상태에서. 참가자에게 푸시 |
+
+참가/취소는 `races` 행을 `@Version`(낙관적 락) 또는 `FOR UPDATE` 로 잡고 `participant_count` 와 함께 갱신.
+
+#### 🔒 `POST /races/{raceId}/result` — 결과 제출 (러닝 종료 직후 자동 호출)
+
+```json
+// SubmitRaceResultRequest
+{ "runId": "01JB..." }   // 먼저 POST /runs 로 저장한 기록
+```
+
+서버 검증 및 계산:
+
+1. 참가자 본인 기록인지, 대결 `status ∈ {live, finished}` 이고 `now ≤ endsAt + 10분`(유예) 인지.
+2. `run.started_at` 이 `startsAt ± 60초` 안인지 (자동 시작이므로 대부분 일치).
+3. `run_routes.points` 를 순서대로 누적해 **목표 거리 도달 시점의 타임스탬프**를 찾음 → `finishSeconds = 도달 시각 - startsAt`.
+   일시정지 시간은 빼지 않음(레이스는 벽시계 기준).
+4. 도달 못 했으면 `distance_meters` 만 기록, 상태는 확정 때 `dnf`.
+5. 이상치: 구간 속도 > 7m/s(약 2:23/km)가 30초 이상, 위치 정확도 불량 비율 과다 등 → `flag_reason` 기록 후 `disqualified` (규칙은 8장에서 확정).
+
+응답 `200 { "status": "finished", "finishSeconds": 1650, "provisionalRank": 2 }` (확정 전 임시 순위).
+같은 runId 재제출은 멱등, 다른 runId로 재제출은 `409`.
+
+#### 🔒 `GET /races/{raceId}/results` — 결과 (확정 후)
+
+`{ "finalizedAt": "...", "items": [{ "rank", "user", "status", "finishSeconds", "distanceMeters", "averagePaceSecondsPerKm" }] }`.
+정렬: 완주자(`finishSeconds ASC`) → DNF(`distance DESC`) → 실격.
+
+#### 대결 스케줄러 (Spring `@Scheduled(fixedDelay = 15s)` 또는 Quartz)
+
+| 시점 | 처리 | 푸시 |
+| --- | --- | --- |
+| 출발 60분·10분 전 | — | "곧 대결이 시작돼요" (참가자) |
+| `join_deadline_at` | `recruiting` → 인원 ≥ min 이면 `confirmed`, 아니면 `cancelled(not_enough_participants)` | 확정 / 취소 알림 |
+| 출발 1분 전 | — | "1분 뒤 출발! 앱을 열어 주세요" |
+| `starts_at` | `confirmed` → `live` | — |
+| `ends_at` (+10분 유예) | 미제출자 `dnf`, 순위 계산해 `rank` 저장, `live` → `finished` | 결과 알림 (1등 축하) |
+
+- 조회 쿼리는 위 부분 인덱스(`idx_races_deadline` 등)를 사용: `WHERE status='recruiting' AND join_deadline_at <= now() LIMIT 100`.
+- 서버가 여러 대면 ShedLock 으로 중복 실행 방지. 각 전이는 `UPDATE ... WHERE status = '이전상태'` 조건부 갱신으로 멱등.
+- 앱은 상태를 시각으로 자체 계산해 표시하지만, **결과·취소 여부는 항상 서버 값이 기준**.
+
+---
+
+### 4.9 미디어 업로드 (프로필·크루 이미지)
 
 앱 → 서버에 presigned URL 요청 → 앱이 스토리지(S3/Cloudflare R2)로 직접 PUT → 완료 통보.
 
@@ -683,7 +930,7 @@ message/media/run 중 최소 하나. 응답 `201` = 피드 항목 1개.
 
 ```json
 // 요청
-{ "purpose": "social_post", "contentType": "image/jpeg", "sizeBytes": 1824000 }
+{ "purpose": "crew_image", "contentType": "image/jpeg", "sizeBytes": 1824000 }
 // 응답 201
 { "mediaId": "01JC...", "uploadUrl": "https://...signed", "method": "PUT",
   "headers": { "Content-Type": "image/jpeg" }, "expiresAt": "2026-10-21T07:00:00Z" }
@@ -694,25 +941,7 @@ message/media/run 중 최소 하나. 응답 `201` = 피드 항목 1개.
 #### 🔒 `POST /media/{mediaId}/complete`
 
 서버가 객체 존재·크기·MIME 확인 → **EXIF(GPS) 제거·리사이즈** → `status = ready`.
-응답 `{ "id", "url", "width", "height" }`. 24시간 내 게시물에 연결 안 된 `pending/ready` 미디어는 배치로 정리.
-
----
-
-### 4.9 친구(팔로우)·검색·차단
-
-| Method | Path | 설명 |
-| --- | --- | --- |
-| 🔒 GET | `/social/users?query=호성&cursor=&limit=20` | 닉네임/handle 부분 일치(2자 이상, `searchable=true`, 차단 제외) |
-| 🔒 GET | `/social/users/{userId}` | 프로필 카드 (공개 범위에 따라 러닝 통계 노출) |
-| 🔒 POST | `/social/follows/{userId}` | 팔로우. 상대가 `private` 면 `pending`, 아니면 `accepted` |
-| 🔒 DELETE | `/social/follows/{userId}` | 언팔로우 / 보낸 요청 취소 |
-| 🔒 GET | `/social/follows?type=following\|followers&cursor=` | 목록 |
-| 🔒 GET | `/social/follow-requests?cursor=` | 받은 요청(pending) |
-| 🔒 POST | `/social/follow-requests/{userId}/accept` | 수락 |
-| 🔒 DELETE | `/social/follow-requests/{userId}` | 거절 |
-| 🔒 POST / DELETE | `/social/blocks/{userId}` | 차단 / 해제 (차단 시 양방향 follow 삭제) |
-
-사용자 항목 DTO: `{ "id", "nickname", "handle", "profileImageUrl", "followStatus": "none|requested|following|follows_you|mutual" }`
+응답 `{ "id", "url", "width", "height" }`. 24시간 내 프로필/크루에 연결 안 된 `pending/ready` 미디어는 배치로 정리.
 
 ---
 
@@ -734,7 +963,7 @@ message/media/run 중 최소 하나. 응답 `201` = 피드 항목 1개.
 
 `spring-boot-starter-web`, `-validation`, `-data-jpa`, `-security`, `-oauth2-resource-server`(JWT 검증),
 `postgresql`, `flyway-core`(+ `flyway-database-postgresql`), `hypersistence-utils-hibernate-63`(JSONB 매핑),
-`com.github.f4b6a3:ulid-creator`, `software.amazon.awssdk:s3`(presigned URL), `springdoc-openapi-starter-webmvc-ui`(Swagger).
+`com.github.f4b6a3:ulid-creator`, `net.javacrumbs.shedlock`(스케줄러 중복 실행 방지), `software.amazon.awssdk:s3`(presigned URL), `springdoc-openapi-starter-webmvc-ui`(Swagger).
 
 ### 5.2 패키지 구조 (도메인별)
 
@@ -746,7 +975,8 @@ com.pace
  ├─ user        (User, UserSettings, UserController, SettingsController)
  ├─ run         (Run, RunRoute, RunController, RunService, RouteSimplifier, DistanceCalculator)
  ├─ stats       (DashboardController, StatsController, StatsQueryRepository)
- ├─ social      (Post, PostMedia, PostReaction, Follow, Block, FeedService ...)
+ ├─ crew        (Crew, CrewMember, CrewJoinRequest, CrewRankingService, CrewStatsUpdater)
+ ├─ race        (Race, RaceParticipant, RaceService, RaceResultCalculator, RaceScheduler)
  ├─ media       (MediaAsset, MediaController, StorageService, ImageProcessor)
  └─ device      (DevicePushToken, PushService)
 ```
@@ -799,9 +1029,9 @@ DB 마이그레이션은 Flyway `V1__init.sql` 에 3장의 DDL을 그대로 사�
 | --- | --- | --- |
 | **1. MVP** | Auth(Apple·Kakao·Google) + `GET/PATCH /users/me` + settings + `POST/GET/DELETE /runs` + `/runs/{id}` | 로그인 실제 동작, 기록·목표 서버 저장, 기기 기록 업로드 |
 | 2. 집계 | `/dashboard`, `/stats/running` | 홈·통계를 서버 집계로 (기기 계산은 오프라인 fallback) |
-| 3. 소셜 | media 업로드, posts, feed, reactions | 소셜 탭 목업 제거 |
-| 4. 친구 | follows, 검색, 요청, 차단 | 친구 찾기·관리 |
-| 5. 알림 | push token, 리마인더/주간 리포트 배치 | 설정 토글 실제 동작 |
+| 3. 크루 | crews, 가입(코드·신청/승인), 탈퇴, `crew_period_stats` + 랭킹 | 크루 탭 목업 제거 (`crew-repository.ts` 교체) |
+| 4. 대결 | races, 참가/취소, 스케줄러(마감 판정·live·확정), 결과 제출 | 대결 탭 목업 제거 + 출발 시 자동 러닝 연결 |
+| 5. 알림 | push token, 대결 알림(확정·취소·출발 1분 전·결과), 크루 신청 알림, 리마인더 | 설정 토글 실제 동작 |
 | 6. 탈퇴 | `DELETE /users/me` + 삭제 배치 | **App Store 제출 전 필수**(계정 생성이 있는 앱은 앱 내 탈퇴 필수) |
 
 ---
@@ -817,7 +1047,13 @@ DB 마이그레이션은 Flyway `V1__init.sql` 에 3장의 DDL을 그대로 사�
 | 기록 목록 (`features/runs/runs-screen.tsx`) | `GET /runs`, `DELETE /runs/{id}`, `POST /runs/{id}/restore` |
 | 기록 상세 (`features/runs/run-detail-screen.tsx`) | `GET /runs/{id}?route=simplified` |
 | 통계 (`features/stats/stats-screen.tsx`) | `GET /stats/running` |
-| 소셜 (`features/social/*`) | `/social/feed`, `/social/posts`, `/media/*`, reactions |
+| 크루 탭 · 크루 (`features/crew/crew-section.tsx`) | `GET /crews/rankings?period=`, `GET /users/me/crew`, `POST /crews/join-by-code` |
+| 크루 탭 · 대결 (`features/race/race-section.tsx`) | `GET /races?scope=mine`, `GET /races?scope=open`, `POST /races/join-by-code` |
+| 크루 만들기 (`features/crew/crew-create-screen.tsx`) | `POST /crews` (+ `/media/*` 이미지 추후) |
+| 크루 상세 (`features/crew/crew-detail-screen.tsx`) | `GET /crews/{id}?period=`, `GET /crews/{id}/members/stats`, join-requests, `DELETE /crews/{id}/members/me`, `POST /crews/{id}/invite-code` |
+| 대결 만들기 (`features/race/race-create-screen.tsx`) | `POST /races` |
+| 대결 상세 (`features/race/race-detail-screen.tsx`) | `GET /races/{id}`, `POST/DELETE /races/{id}/participants`, `POST /races/{id}/cancel`, `GET /races/{id}/results` |
+| 대결 러닝 (추후, `run-tracking-screen.tsx` 재사용) | 종료 시 `POST /runs` → `POST /races/{id}/result` |
 | 마이 (`features/profile/profile-screen.tsx`) | `GET /users/me`, `GET /users/me/settings` |
 | 주간 목표 (`features/profile/weekly-goal-screen.tsx`) | `PATCH /users/me/settings` |
 | 설정 (`features/settings/settings-screen.tsx`) | `GET/PATCH /users/me/settings`, push token, `DELETE /users/me`, `POST /auth/logout` |
@@ -830,10 +1066,15 @@ DB 마이그레이션은 Flyway `V1__init.sql` 에 3장의 DDL을 그대로 사�
 2. 원본 GPS(`run_routes.points`) 보관 기간 (예: 무기한 vs 1년 후 simplified만 남기기)
 3. 삭제 되돌리기 허용 기간(24시간 제안)과 소프트 삭제 데이터 영구 삭제 주기
 4. 로그인 전 기기 기록을 로그인 시 자동 업로드할지, 사용자에게 물어볼지
-5. 피드 기본 공개 범위(`followers` 제안), 경로 지도 공개 기본값(비공개 제안)
-6. 이미지 스토리지(S3 vs Cloudflare R2 — R2는 전송료 무료)와 CDN 도메인
-7. access/refresh 토큰 만료(30분/30일 제안)
-8. 신고 기능·운영자 관리 범위
+5. 이미지 스토리지(S3 vs Cloudflare R2 — R2는 전송료 무료)와 CDN 도메인
+6. access/refresh 토큰 만료(30분/30일 제안)
+7. 신고 기능·운영자 관리 범위 (크루 이름·대결 제목 부적절 신고)
+8. **대결 부정행위 기준**: 구간 최고 속도, GPS 정확도 불량 비율, 출발 시각 허용 오차(±60초 제안), 실격 시 이의 제기 여부
+9. **대결 제한 시간**: km당 12분(5K = 60분) 고정 vs 방장이 설정
+10. **크루 정원**(50명 제안)·크루 해체 조건, 크루 탈퇴 후 재가입 대기 기간(어뷰징 방지, 예: 24시간)
+11. **크루 랭킹 기간 경계**: Asia/Seoul 고정(제안) vs 사용자 시간대. 탈퇴한 멤버의 이번 기간 거리 제외(제안) vs 유지
+12. 크루 멤버 목록·거리의 **비멤버 공개 범위**
+13. 대결 출발 시 앱이 백그라운드/종료 상태일 때 처리 (푸시 탭 → 앱 열림 → 늦게 출발한 만큼 불리 / 허용 오차 내 자동 보정)
 
 ---
 

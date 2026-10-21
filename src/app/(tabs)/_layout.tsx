@@ -11,7 +11,7 @@ const tabItems = [
   { route: 'runs', label: '기록', icon: 'run' },
   { route: 'stats', label: '통계', icon: 'stats' },
   { route: 'main', label: '홈', icon: 'home' },
-  { route: 'social', label: '소셜', icon: 'social' },
+  { route: 'crew', label: '크루', icon: 'crew' },
   { route: 'profile', label: '마이', icon: 'profile' },
 ] as const;
 
@@ -78,7 +78,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="runs" />
       <Tabs.Screen name="stats" />
       <Tabs.Screen name="main" />
-      <Tabs.Screen name="social" />
+      <Tabs.Screen name="crew" />
       <Tabs.Screen name="profile" />
     </Tabs>
   );

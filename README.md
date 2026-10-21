@@ -6,7 +6,7 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 
 PACE is a running journal with a dark, mobile-first interface. This first slice
 contains a branded launch splash, three Korean onboarding pages, a social-login
-UI prototype, and sample running home, history, statistics, community, profile,
+UI prototype, and sample running home, history, statistics, crew/race, profile,
 and settings screens. Screen data and social login buttons are prototypes and
 are not connected to a backend.
 
@@ -21,15 +21,18 @@ are not connected to a backend.
   permissions; browser/PWA and Expo Go cannot keep recording with the screen
   locked.
 - The five bottom tabs use Expo Router's tab navigator: home, run history,
-  statistics, social feed, and profile. Switching tabs does not add a back-stack
+  statistics, crew, and profile. Switching tabs does not add a back-stack
   entry. App settings and run details are pushed as sub-screens with a back
   affordance; top-level tabs do not need one.
 - Tab titles remain fixed while the screen content scrolls.
-- Social feed reactions and settings controls only update the preview UI; they
-  are not persisted or synced.
-- Social post composition can select up to four photos and requires an
-  audience choice for each post. Selected images are preview-only until media
-  upload and post APIs are connected.
+- The crew tab has two segments. **Crew** shows weekly/monthly crew distance
+  rankings, crew detail (member distances, invite code), create, join by invite
+  code or request, and leave (one crew per user). **Race** lists open and joined
+  remote races (same start time, ranked by time to the target distance), with
+  create, join/leave, join by code, host cancel, a start countdown, and results.
+  All crew/race data is in-memory sample data (`src/data/crew-repository.ts`,
+  `src/data/race-repository.ts`) and resets when the app restarts.
+- Settings controls only update the preview UI; they are not persisted or synced.
 - GPS routes are stored locally on the device. Force-quitting the app or
   operating-system battery restrictions can interrupt background recording;
   cloud sync is not connected.
@@ -48,7 +51,7 @@ are not connected to a backend.
   | Path | Role |
   | --- | --- |
   | `src/app` | Expo Router routes only (thin wrappers around feature screens) |
-  | `src/features/<feature>` | Screens and feature UI (home, runs, stats, social, profile, …) |
+  | `src/features/<feature>` | Screens and feature UI (home, runs, stats, crew, race, profile, …) |
   | `src/features/running` | Run domain: `types.ts`, pure session logic (`run-session.ts`), aggregates (`run-insights.ts`), GPS background task (`location-tracking.ts`) |
   | `src/data` | Repositories — the only layer that touches storage. Swap these for API calls when the backend is connected |
   | `src/hooks` | Shared hooks (`use-focus-query.ts` reloads data on screen focus) |
