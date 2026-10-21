@@ -1,5 +1,6 @@
 import type { LocationObject } from 'expo-location';
 
+import { syncRunLiveActivity } from '@/features/running/run-live-activity';
 import { applyLocationUpdates } from '@/features/running/run-session';
 import type { ActiveRun } from '@/features/running/types';
 
@@ -22,6 +23,7 @@ const listeners = new Set<() => void>();
 
 function publish(next: ActiveRunSnapshot): void {
   snapshot = next;
+  if (next.loaded && !next.error) syncRunLiveActivity(next.run);
   for (const listener of listeners) listener();
 }
 

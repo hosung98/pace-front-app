@@ -2,7 +2,7 @@
   "expo": {
     "name": "PACE",
     "slug": "pace-front-app",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./public/pwa-512.png",
     "scheme": "pacefrontapp",
@@ -61,7 +61,15 @@
         }
       ],
       "expo-asset",
-      "expo-maps"
+      "expo-maps",
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "com.hocompany.pace.ExpoWidgetsTarget",
+          "groupIdentifier": "group.com.hocompany.pace",
+          "frequentUpdates": true
+        }
+      ]
     ],
     "experiments": {
       "baseUrl": "/dev",
