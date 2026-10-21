@@ -19,6 +19,7 @@ import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 
 import { RUN_LOCATION_TASK } from './location-task';
+import { RunReadyView } from './run-ready-view';
 import {
   clearActiveRun,
   formatDuration,
@@ -270,18 +271,17 @@ export function RunTrackingScreen() {
         <View style={styles.headerSpacer} />
       </View>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.eyebrow}>GPS RUN TRACKER</Text>
-        <Text style={styles.title}>
-          {run ? (run.status === 'running' ? '러닝 중' : '잠시 쉬어가요') : '나만의 페이스로'}
-        </Text>
-        <Text style={styles.description}>
-          {run?.status === 'running'
-            ? '화면을 잠가도 러닝 기록을 계속합니다.'
-            : 'GPS로 거리와 속도를 기록해요.'}
-        </Text>
-
         {run ? (
           <>
+            <Text style={styles.eyebrow}>GPS RUN TRACKER</Text>
+            <Text style={styles.title}>
+              {run.status === 'running' ? '러닝 중' : '잠시 쉬어가요'}
+            </Text>
+            <Text style={styles.description}>
+              {run.status === 'running'
+                ? '화면을 잠가도 러닝 기록을 계속합니다.'
+                : 'GPS로 거리와 속도를 기록해요.'}
+            </Text>
             <View style={styles.distanceCard}>
               <Text style={styles.metricLabel}>누적 거리</Text>
               <Text style={styles.distance}>
@@ -338,14 +338,7 @@ export function RunTrackingScreen() {
             )}
           </>
         ) : (
-          <View style={styles.readyCard}>
-            <View style={styles.readyIcon}><Text style={styles.readyIconText}>⌖</Text></View>
-            <Text style={styles.readyTitle}>러닝을 기록할 준비가 됐어요</Text>
-            <Text style={styles.readyDescription}>
-              시작을 누르면 위치 권한을 요청하고, 위치는 러닝 중에만 사용해요.
-            </Text>
-            <ActionButton label="러닝 시작" disabled={busy} onPress={startRun} />
-          </View>
+          <RunReadyView busy={busy} onStart={startRun} />
         )}
 
         {message ? (
@@ -445,11 +438,6 @@ const styles = StyleSheet.create({
   secondaryButtonText: { color: C.text },
   disabledButton: { opacity: 0.5 },
   pressed: { opacity: 0.75 },
-  readyCard: { marginTop: 25, padding: 22, alignItems: 'center', borderRadius: 22, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
-  readyIcon: { width: 58, height: 58, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: '#252E1B' },
-  readyIconText: { color: C.accent, fontSize: 31 },
-  readyTitle: { marginTop: 16, color: C.text, fontSize: 14, fontWeight: '700' },
-  readyDescription: { marginTop: 7, marginBottom: 19, color: C.muted, fontSize: 10, lineHeight: 16, textAlign: 'center' },
   confirmCard: { marginTop: 21, padding: 16, borderRadius: 17, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   confirmTitle: { color: C.text, fontSize: 12, fontWeight: '700' },
   confirmDescription: { marginTop: 5, color: C.muted, fontSize: 9 },

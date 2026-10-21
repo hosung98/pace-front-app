@@ -187,9 +187,10 @@ PKCE 사용 여부는 플랫폼과 provider SDK 설정에 맞춰 확정합니다
 
 #### iOS/Android 권한 및 실행 조건
 
-- 위치 권한은 사용자가 러닝 시작을 누른 시점에 요청합니다. 앱 사용 중 위치 권한을
-  먼저 요청하고, 화면 잠금 중에도 추적하려면 별도 백그라운드/Always 권한을
-  요청합니다. 거부 시 위치 수집을 시작하지 않습니다.
+- 위치 권한은 사용자가 러닝 시작을 누른 시점에 요청합니다. 앱 사용 중(When In Use)
+  위치 권한만으로 기록을 시작하며, 앱에서 시작한 추적은 화면이 잠겨도 iOS 위치
+  표시기/Android Foreground Service로 계속됩니다. Always 권한은 필수가 아닙니다.
+  거부 시 위치 수집을 시작하지 않습니다.
 - Android는 백그라운드 권한 외에 러닝 중 위치 Foreground Service와 지속 알림이
   필요합니다. iOS는 `location` background mode와 위치 권한 설명이 필요합니다.
 - Expo 설정은 `expo-location` config plugin을 사용합니다. 백그라운드 위치는
