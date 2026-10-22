@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { getSessionState, useSession } from '@/features/auth/session-store';
 import { ApiError } from '@/lib/api-transport';
@@ -14,7 +14,7 @@ type FocusQuery<T> = {
 
 /**
  * Loads data every time the screen gains focus (so edits made on other screens show up).
- * `load` must be a stable reference — pass a module-level function.
+ * `load` must be stable — use a module-level function or useCallback for query parameters.
  */
 export function useFocusQuery<T>(
   load: () => Promise<T>,
@@ -27,10 +27,13 @@ export function useFocusQuery<T>(
   const [snapshot, setSnapshot] = useState({ userId, data: initialData });
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const requestVersion = useRef(0);
 
   const run = useCallback(
     async (isActive: () => boolean) => {
-      const isCurrent = () => isActive() && getSessionState().session?.user.id === userId;
+      const version = ++requestVersion.current;
+      const isCurrent = () => requestVersion.current === version
+        && isActive() && getSessionState().session?.user.id === userId;
       setIsLoading(true);
       setSnapshot({ userId, data: initial });
       try {
@@ -55,6 +58,7 @@ export function useFocusQuery<T>(
       void run(() => active);
       return () => {
         active = false;
+        requestVersion.current += 1;
       };
     }, [run]),
   );

@@ -20,46 +20,12 @@ import { errorMessage, requestJson } from '@/lib/api-transport';
 import { googleIdToken } from './google-login';
 import { acceptSession, useSession, type AuthTokens } from './session-store';
 
-const loginProviders = [
-  {
-    id: 'google',
-    label: 'Google로 계속하기',
-    buttonStyle: 'google' as const,
-    textStyle: 'googleText' as const,
-  },
-  {
-    id: 'kakao',
-    label: '카카오로 계속하기',
-    buttonStyle: 'kakao' as const,
-    textStyle: 'kakaoText' as const,
-  },
-  {
-    id: 'apple',
-    label: 'Apple로 계속하기',
-    buttonStyle: 'apple' as const,
-    textStyle: 'appleText' as const,
-  },
-] as const;
-
-type LoginProvider = (typeof loginProviders)[number]['id'];
-
-const providerNames: Record<LoginProvider, string> = {
-  google: 'Google',
-  kakao: '카카오',
-  apple: 'Apple',
-};
-
 export function LoginScreen() {
   const router = useRouter();
   const { session } = useSession();
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const [selectedProvider, setSelectedProvider] =
-    useState<LoginProvider | null>(null);
-
-  const signIn = async (provider: LoginProvider) => {
-    setSelectedProvider(provider);
-    if (provider !== 'google') return;
+  const signIn = async () => {
     setBusy(true);
     try {
       if (await readActiveRun()) throw new Error('러닝을 종료하고 저장한 뒤 로그인해 주세요.');
@@ -109,34 +75,29 @@ export function LoginScreen() {
           </View>
 
           <View style={styles.loginOptions}>
-            {loginProviders.map((provider) => (
               <Pressable
-                key={provider.id}
                 accessibilityRole="button"
-                accessibilityLabel={provider.label}
+                accessibilityLabel="Google로 계속하기"
                 disabled={busy}
                 accessibilityState={{ disabled: busy }}
-                onPress={() => { void signIn(provider.id); }}
+                onPress={() => { void signIn(); }}
                 style={({ pressed }) => [
                   styles.providerButton,
-                  styles[provider.buttonStyle],
+                  styles.google,
                   pressed && styles.pressed,
                 ]}>
                 <Text
                   style={[
                     styles.providerText,
-                    styles[provider.textStyle],
+                    styles.googleText,
                   ]}>
-                  {busy && provider.id === 'google' ? '로그인 중…' : provider.label}
+                  {busy ? '로그인 중…' : 'Google로 계속하기'}
                 </Text>
               </Pressable>
-            ))}
             <Text
               accessibilityLiveRegion="polite"
               style={styles.statusMessage}>
-              {selectedProvider && selectedProvider !== 'google'
-                ? `${providerNames[selectedProvider]} 로그인은 아직 연결되지 않았어요.`
-                : '현재 Google 로그인은 새로 빌드한 iOS 앱에서 지원해요.'}
+              현재 Google 로그인은 iOS 앱에서 지원해요.{'\n'}카카오·Apple 로그인은 준비 중이에요.
             </Text>
           </View>
 
@@ -239,20 +200,6 @@ const styles = StyleSheet.create({
   },
   googleText: {
     color: '#202124',
-  },
-  kakao: {
-    backgroundColor: '#FEE500',
-  },
-  kakaoText: {
-    color: '#191600',
-  },
-  apple: {
-    backgroundColor: C.surface,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  appleText: {
-    color: C.text,
   },
   statusMessage: {
     minHeight: 18,

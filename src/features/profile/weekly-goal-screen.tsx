@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackHeader } from '@/components/back-header';
-import { PaceErrorDialog } from '@/components/pace-feedback';
+import { PaceErrorDialog, PaceQueryState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { getWeeklyGoalKm, saveWeeklyGoalKm } from '@/data/weekly-goal-repository';
@@ -22,7 +22,7 @@ export function WeeklyGoalScreen() {
     data: goalKm,
     setData: setGoalKm,
     errorMessage: loadErrorMessage,
-    clearError,
+    reload,
     isLoading,
   } = useFocusQuery(
     getWeeklyGoalKm,
@@ -31,7 +31,6 @@ export function WeeklyGoalScreen() {
   );
   const [isSaving, setIsSaving] = useState(false);
   const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
-  const errorMessage = saveErrorMessage ?? loadErrorMessage;
 
   const saveGoal = async () => {
     setIsSaving(true);
@@ -59,6 +58,10 @@ export function WeeklyGoalScreen() {
           무리하지 않는 거리부터 시작해 꾸준히 이어가 보세요.
         </Text>
 
+        {isLoading || loadErrorMessage ? (
+          <PaceQueryState loading={isLoading} message={loadErrorMessage} onRetry={() => { void reload(); }} />
+        ) : (
+        <>
         <View style={styles.goalCard}>
           <Text style={styles.goalLabel}>주간 러닝 거리</Text>
           <View style={styles.goalValueRow}>
@@ -117,13 +120,14 @@ export function WeeklyGoalScreen() {
             {isSaving ? '저장 중…' : '목표 저장하기'}
           </Text>
         </Pressable>
+        </>
+        )}
       </View>
       </ScrollView>
       <PaceErrorDialog
-        message={errorMessage}
+        message={saveErrorMessage}
         onClose={() => {
           setSaveErrorMessage(null);
-          clearError();
         }}
       />
     </SafeAreaView>

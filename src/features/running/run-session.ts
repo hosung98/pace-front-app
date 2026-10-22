@@ -57,8 +57,26 @@ export function toCompletedRun(run: ActiveRun, endedAt = Date.now()): CompletedR
       run.distanceMeters > 0
         ? Math.round(durationSeconds / (run.distanceMeters / 1000))
         : null,
-    routePoints: run.routePoints,
+    routePoints: getUploadRoutePoints({ ...run, endedAt }),
   };
+}
+
+export function getUploadRoutePoints(
+  run: Pick<CompletedRun, 'startedAt' | 'endedAt' | 'routePoints'>,
+): RunPoint[] {
+  let previous = run.startedAt;
+  const points = run.routePoints.filter((point) => {
+    if (!Number.isFinite(point.recordedAt)
+        || point.recordedAt < previous || point.recordedAt > run.endedAt) return false;
+    previous = point.recordedAt;
+    return true;
+  });
+  if (points.length !== run.routePoints.length) {
+    console.warn('러닝 시간 범위 밖이거나 역순인 GPS 포인트를 전송 경로에서 제외했어요.', {
+      excludedCount: run.routePoints.length - points.length,
+    });
+  }
+  return points;
 }
 
 /** Live pace from the current speed, or null when (nearly) standing still. */
@@ -68,12 +86,18 @@ export function getCurrentPaceSecondsPerKm(run: ActiveRun): number | null {
 }
 
 /** Filters noisy GPS samples and accumulates distance. Pure — persistence is the caller's job. */
-export function applyLocationUpdates(run: ActiveRun, locations: LocationObject[]): ActiveRun {
+export function applyLocationUpdates(
+  run: ActiveRun,
+  locations: LocationObject[],
+  receivedAt = Date.now(),
+): ActiveRun {
+  if (run.status !== 'running') return run;
   let next = run;
 
   for (const location of locations) {
     const { coords, timestamp } = location;
     if (
+      !Number.isFinite(timestamp) || timestamp < run.startedAt || timestamp > receivedAt ||
       (coords.accuracy !== null && coords.accuracy > MAX_ACCURACY_METERS) ||
       location.mocked === true
     ) {

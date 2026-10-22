@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { PaceErrorDialog } from '@/components/pace-feedback';
+import { PaceQueryState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { TabScreenShell, tabScreenStyles } from '@/features/navigation/tab-screen-shell';
@@ -16,7 +16,7 @@ export function StatsScreen() {
   const [period, setPeriod] = useState<Period>('주간');
   const { session } = useSession();
   const load = useCallback(() => getStatsData(period === '주간' ? 'week' : 'month'), [period]);
-  const { data, errorMessage, clearError } = useFocusQuery(
+  const { data, errorMessage, isLoading, reload } = useFocusQuery(
     load,
     { distanceKm: 0, values: [] as number[], labels: [] as string[], allTime: { distanceKm: 0, runCount: 0, averagePaceSecondsPerKm: null as number | null, longestRunKm: 0 } },
     '러닝 통계를 불러오지 못했어요. 연결 상태를 확인해 주세요.',
@@ -43,6 +43,10 @@ export function StatsScreen() {
           </Pressable>
         ))}
       </View>
+      {isLoading || errorMessage ? (
+        <PaceQueryState loading={isLoading} message={errorMessage} onRetry={() => { void reload(); }} />
+      ) : (
+      <>
       <View style={tabScreenStyles.card}>
         <Text style={styles.chartTitle}>{period === '주간' ? '이번 주 거리' : '이번 달 거리'}</Text>
         <Text style={styles.distance}>{distanceKm.toFixed(2)}<Text style={styles.distanceUnit}> km</Text></Text>
@@ -73,10 +77,8 @@ export function StatsScreen() {
         <StatCard label="평균 페이스" value={formatPace(allTime.averagePaceSecondsPerKm)} unit="/km" detail="전체 거리 가중 평균" />
         <StatCard label="최장 거리" value={allTime.longestRunKm.toFixed(2)} unit="km" detail="저장된 기록 중 최장" />
       </View>
-      <PaceErrorDialog
-        message={errorMessage}
-        onClose={clearError}
-      />
+      </>
+      )}
     </TabScreenShell>
   );
 }

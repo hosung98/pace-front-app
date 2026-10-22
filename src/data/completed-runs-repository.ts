@@ -1,5 +1,6 @@
 import { getSessionState, requireUserId } from '@/features/auth/session-store';
 import type { CompletedRun } from '@/features/running/types';
+import { getUploadRoutePoints } from '@/features/running/run-session';
 import { api } from '@/lib/api';
 import { ApiError, errorMessage } from '@/lib/api-transport';
 import { readJson, STORAGE_KEYS, writeJson } from './storage';
@@ -86,7 +87,8 @@ async function sync(id: string): Promise<void> {
         clientRunId: run.id, startedAt: new Date(run.startedAt).toISOString(),
         endedAt: new Date(run.endedAt).toISOString(), durationSeconds: run.durationSeconds,
         distanceMeters: Math.round(run.distanceMeters),
-        routePoints: run.routePoints.map((point) => ({
+        // 기존 기록은 원본을 남기고 서버의 시간 조건에 맞는 경로만 전송합니다.
+        routePoints: getUploadRoutePoints(run).map((point) => ({
           ...point, recordedAt: new Date(point.recordedAt).toISOString(),
         })),
       }),

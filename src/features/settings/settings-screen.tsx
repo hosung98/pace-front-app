@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackHeader } from '@/components/back-header';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
-import { PaceErrorDialog } from '@/components/pace-feedback';
+import { PaceQueryState } from '@/components/pace-feedback';
 import { PaceConfirmDialog } from '@/components/pace-confirm-dialog';
 import { deleteAccount as deleteServerAccount, getSettings, patchSettings, type SettingsPatch } from '@/data/account-repository';
 import { readActiveRun } from '@/data/active-run-store';
@@ -26,7 +26,7 @@ export function SettingsScreen() {
 function AccountSettings() {
   const router = useRouter();
   const { session } = useSession();
-  const { data: settings, errorMessage, clearError, isLoading, setData } = useFocusQuery(
+  const { data: settings, errorMessage, isLoading, setData, reload } = useFocusQuery(
     loadSettings, null, '설정을 불러오지 못했어요. 연결 상태를 확인해 주세요.',
   );
   const [busy, setBusy] = useState(false);
@@ -66,6 +66,10 @@ function AccountSettings() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {session && (isLoading || errorMessage) ? (
+          <PaceQueryState loading={isLoading} message={errorMessage} onRetry={() => { void reload(); }} />
+        ) : (
+        <>
         <Text style={styles.sectionTitle}>알림</Text>
         <View style={styles.card}>
           <SettingSwitch
@@ -118,7 +122,7 @@ function AccountSettings() {
         <View style={styles.card}>
           <SettingSwitch
             title="비공개 프로필"
-            detail="계정의 공개 범위를 저장해요. 크루·대결 공개 기능은 준비 중이에요."
+            detail="계정 프로필의 공개 범위를 저장해요."
             value={privateProfile}
             disabled={disabled}
             onValueChange={(value) => { void update({ profileVisibility: value ? 'private' : 'public' }); }}
@@ -138,8 +142,9 @@ function AccountSettings() {
         </View>
         {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}
         <Text style={styles.note}>{session ? '변경한 설정은 계정에 저장됩니다.' : '로그인 후 계정 설정과 탈퇴 기능을 사용할 수 있어요.'}</Text>
+        </>
+        )}
       </ScrollView>
-      <PaceErrorDialog message={errorMessage} onClose={clearError} />
       <PaceConfirmDialog visible={confirmDelete} title="계정을 삭제할까요?"
         message="계정과 서버에 저장된 러닝·GPS 경로가 영구 삭제됩니다. 이 작업은 되돌릴 수 없어요."
         onCancel={() => setConfirmDelete(false)} onConfirm={() => { void deleteAccount(); }} />

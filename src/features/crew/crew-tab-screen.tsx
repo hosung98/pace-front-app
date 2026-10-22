@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { SegmentedControl } from '@/components/segmented-control';
+import { CommunitySignIn } from '@/features/crew/community-access';
 import { CrewSection } from '@/features/crew/crew-section';
-import { TabScreenShell } from '@/features/navigation/tab-screen-shell';
 import { RaceSection } from '@/features/race/race-section';
+import { useSession } from '@/features/auth/session-store';
+import { TabScreenShell } from '@/features/navigation/tab-screen-shell';
 
 type Section = 'crew' | 'race';
 
@@ -15,6 +17,7 @@ const SECTION_OPTIONS = [
 
 export function CrewTabScreen() {
   const [section, setSection] = useState<Section>('crew');
+  const { session } = useSession();
 
   return (
     <TabScreenShell
@@ -25,9 +28,14 @@ export function CrewTabScreen() {
           ? '크루원들의 거리를 모아 주간·월간 순위를 겨뤄요.'
           : '시간을 정해 방을 열고, 모이면 동시에 출발해요.'
       }
-      disclaimer="크루·대결 데이터는 백엔드 연동 전 샘플입니다.">
+      badge={session ? '계정 연결' : '로그인 필요'}
+      disclaimer="크루·대결 목록은 서버에 저장된 데이터입니다. 대결 자동 출발과 GPS 결과 등록은 아직 지원하지 않습니다.">
       <SegmentedControl options={SECTION_OPTIONS} value={section} onChange={setSection} style={styles.segment} />
-      {section === 'crew' ? <CrewSection /> : <RaceSection />}
+      {!session ? <CommunitySignIn /> : (
+        <View key={session.user.id}>
+          {section === 'crew' ? <CrewSection /> : <RaceSection />}
+        </View>
+      )}
     </TabScreenShell>
   );
 }

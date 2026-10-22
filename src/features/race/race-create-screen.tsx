@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackHeader } from '@/components/back-header';
@@ -49,6 +49,12 @@ function formatClock(minutesOfDay: number): string {
 
 export function RaceCreateScreen() {
   const router = useRouter();
+  const submitting = useRef(false);
+  const focused = useRef(false);
+  useFocusEffect(useCallback(() => {
+    focused.current = true;
+    return () => { focused.current = false; };
+  }, []));
   const now = useNow(30_000);
   const [title, setTitle] = useState('');
   const [distanceMeters, setDistanceMeters] = useState<number>(5000);
@@ -67,6 +73,8 @@ export function RaceCreateScreen() {
   const autoTitle = `${formatClock(minutesOfDay)} ${formatRaceDistance(distanceMeters)} 대결`;
 
   const submit = async () => {
+    if (submitting.current || tooSoon) return;
+    submitting.current = true;
     setSaving(true);
     try {
       const raceId = await createRace({
@@ -78,9 +86,11 @@ export function RaceCreateScreen() {
         maxParticipants,
         visibility,
       });
-      router.replace({ pathname: '/race-detail', params: { raceId } });
+      if (focused.current) router.replace({ pathname: '/race-detail', params: { raceId } });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '대결 방을 만들지 못했어요.');
+    } finally {
+      submitting.current = false;
       setSaving(false);
     }
   };
@@ -97,6 +107,7 @@ export function RaceCreateScreen() {
             <TextInput
               accessibilityLabel="방 이름"
               value={title}
+              editable={!saving}
               onChangeText={setTitle}
               maxLength={30}
               placeholder={autoTitle}
@@ -184,11 +195,14 @@ export function RaceCreateScreen() {
             ) : (
               <Text style={styles.summaryText}>
                 <Text style={styles.summaryStrong}>{formatRaceStart(joinDeadline, now)}</Text>까지{' '}
-                <Text style={styles.summaryStrong}>{minParticipants}명</Text> 이상 모이면{' '}
-                <Text style={styles.summaryStrong}>{formatRaceStart(startsAt, now)}</Text>에 다 함께 출발해요.
+                <Text style={styles.summaryStrong}>{minParticipants}명</Text> 이상 모집해요. 예정 시작은{' '}
+                <Text style={styles.summaryStrong}>{formatRaceStart(startsAt, now)}</Text>이에요.
               </Text>
             )}
           </View>
+          <Text style={styles.rule}>
+            현재는 방 생성과 참가자 모집을 지원해요. 자동 출발과 GPS 기록 제출·순위 집계는 아직 지원하지 않아요.
+          </Text>
 
           <PaceButton
             label="방 만들기"
@@ -288,5 +302,6 @@ const styles = StyleSheet.create({
   summaryText: { color: C.muted, fontSize: 13, lineHeight: 20 },
   summaryStrong: { color: C.accent, fontSize: 13, fontWeight: '700' },
   summaryErrorText: { color: '#FF8A80', fontSize: 12, lineHeight: 18 },
+  rule: { marginTop: 12, color: C.subtle, fontSize: 11, lineHeight: 18 },
   submit: { marginTop: 18 },
 });

@@ -74,7 +74,7 @@ async function harness() {
     };
     vm.runInNewContext(code, {
       module, exports: module.exports, require: localRequire, process,
-      fetch: (...args) => h.fetch(...args), AbortController, setTimeout, clearTimeout,
+      fetch: (...args) => h.fetch(...args), AbortController, URLSearchParams, setTimeout, clearTimeout,
       console: { error: () => {}, warn: () => {} },
     }, { filename: file });
     return module.exports;
@@ -364,4 +364,128 @@ test('잘못된 갱신 응답은 이전 refreshToken을 다시 사용하지 않�
   await assert.rejects(h.session.accessToken(), /인증 응답/);
   assert.equal(h.session.getSessionState().session, null);
   assert.equal(h.secure.size, 0);
+});
+
+test('GPS 수집은 시작 전 캐시·미래·역순 샘플을 거부하고 시작 시각 샘플은 허용한다', async () => {
+  const h = await harness();
+  const session = h.load('features/running/run-session');
+  const start = run.startedAt;
+  const sample = (timestamp, latitude = 37.5) => ({
+    timestamp, coords: {
+      latitude, longitude: 127, altitude: null, accuracy: 5,
+      altitudeAccuracy: null, heading: null, speed: 2,
+    },
+  });
+  const active = session.createActiveRun(start);
+  const updated = session.applyLocationUpdates(active, [
+    sample(start - 60_000), sample(start + 20_000), sample(Number.NaN),
+    sample(start), sample(start + 5_000, 37.5001), sample(start + 1_000, 37.50011),
+  ], start + 10_000);
+  assert.equal(updated.routePoints.length, 2);
+  assert.equal(updated.routePoints[0].recordedAt, start);
+  assert.equal(updated.routePoints[1].recordedAt, start + 5_000);
+  assert.ok(updated.distanceMeters > 0);
+  const paused = session.pauseActiveRun(updated, start + 6_000);
+  assert.equal(session.applyLocationUpdates(paused, [sample(start + 8_000)]), paused);
+});
+
+test('기존 미전송 경로는 시간 범위·오름차순을 보정하고 원본·멱등 본문은 유지한다', async () => {
+  const h = await harness();
+  await h.session.acceptSession(tokens());
+  const start = run.startedAt;
+  const point = (recordedAt) => ({ ...run.routePoints[0], recordedAt });
+  const legacy = { ...run, routePoints: [
+    point(start - 1000), point(start), point(start + 2000), point(start + 1000),
+    point(run.endedAt), point(run.endedAt + 1000),
+  ] };
+  const bodies = [];
+  h.fetch = async (_url, options) => {
+    bodies.push(options.body);
+    throw new Error('offline');
+  };
+  assert.equal((await h.runs.saveCompletedRun(legacy)).synced, false);
+  const stored = JSON.parse(h.memory.get(h.keys.runSync));
+  assert.equal(stored.accounts['user:alice'][0].run.routePoints.length, 6);
+  const payload = JSON.parse(bodies[0]);
+  assert.deepEqual(payload.routePoints.map((p) => p.recordedAt), [
+    new Date(start).toISOString(), new Date(start + 2000).toISOString(),
+    new Date(run.endedAt).toISOString(),
+  ]);
+  assert.equal(payload.distanceMeters, Math.round(run.distanceMeters));
+  assert.equal(payload.durationSeconds, run.durationSeconds);
+  h.fetch = async (_url, options) => { bodies.push(options.body); return json(serverRun); };
+  await h.runs.syncCompletedRuns();
+  assert.equal(bodies[1], bodies[0]);
+});
+
+test('완료 기록은 종료 후 시각을 제외하고 유효한 경로와 기존 러닝 시간을 유지한다', async () => {
+  const h = await harness();
+  const session = h.load('features/running/run-session');
+  const active = { ...session.createActiveRun(run.startedAt), distanceMeters: 1000,
+    routePoints: [
+      run.routePoints[0],
+      { ...run.routePoints[0], recordedAt: run.startedAt + 20_000 },
+    ] };
+  const completed = session.toCompletedRun(active, run.startedAt + 10_000);
+  assert.equal(completed.routePoints.length, 1);
+  assert.equal(active.routePoints.length, 2);
+  assert.equal(completed.durationSeconds, 10);
+  assert.equal(completed.distanceMeters, 1000);
+});
+
+test('크루 생성·검색·가입·승인·위임은 실제 API를 사용하고 빈 목록은 그대로 유지한다', async () => {
+  const h = await harness();
+  await h.session.acceptSession(tokens());
+  const calls = [];
+  h.fetch = async (url, options) => {
+    calls.push({ url: new URL(url), options });
+    const pathname = new URL(url).pathname;
+    if (pathname.endsWith('/rankings') || options.method === undefined && pathname.endsWith('/crews')) return json([]);
+    if (pathname.endsWith('/users/me/crew')) return json({ crewId: null });
+    if (pathname.endsWith('/join-by-code') || options.method === 'POST' && pathname.endsWith('/crews')) return json({ id: 'real-crew' });
+    if (pathname.endsWith('/invite-code')) return json({ inviteCode: 'ABC123' });
+    return new Response(null, { status: 204 });
+  };
+  const crews = h.load('data/crew-repository');
+  assert.equal((await crews.getCrewRankings('week')).length, 0);
+  assert.equal(await crews.getMyCrewId(), null);
+  assert.equal((await crews.searchCrews({ query: '한강 & 러너', sido: '서울', sigungu: '마포구' })).length, 0);
+  assert.equal(calls.at(-1).url.searchParams.get('query'), '한강 & 러너');
+  assert.equal(await crews.createCrew({ name: '  첫 크루  ', intro: '소개', region: { sido: '서울', sigungu: null } }), 'real-crew');
+  assert.equal(JSON.parse(calls.at(-1).options.body).name, '첫 크루');
+  assert.equal(await crews.joinCrewByCode(' abC123 '), 'real-crew');
+  assert.equal(JSON.parse(calls.at(-1).options.body).code, 'ABC123');
+  await crews.reviewCrewJoinRequest('real-crew', 'member-1', true);
+  assert.match(calls.at(-1).url.pathname, /join-requests\/member-1\/approve$/);
+  await crews.transferCrewLeadership('real-crew', 'member-1');
+  assert.equal(JSON.parse(calls.at(-1).options.body).userId, 'member-1');
+  h.fetch = async () => json({ message: '서버 미배포', code: 'NOT_FOUND' }, 404);
+  await assert.rejects(crews.getCrewRankings('week'), /서버 미배포/);
+});
+
+test('대결 생성 시 UTC ISO를 전송하고 조회 시 epoch로 변환하며 검색 조건을 전달한다', async () => {
+  const h = await harness();
+  await h.session.acceptSession(tokens());
+  const calls = [];
+  const race = { id: 'real-race', title: '실제 대결', startsAt: '2026-10-23T09:00:00Z',
+    distanceMeters: 5000, joinDeadlineMinutes: 30, minParticipants: 2, maxParticipants: 10,
+    hostNickname: '러너', participantCount: 1, visibility: 'public', isJoined: true, isHost: true, cancelled: false };
+  h.fetch = async (url, options) => {
+    calls.push({ url: new URL(url), options });
+    if (options.method === 'POST') return json({ id: race.id });
+    if (new URL(url).pathname.endsWith('/real-race')) return json({ ...race, participants: [], inviteCode: null });
+    return json([race]);
+  };
+  const races = h.load('data/race-repository');
+  assert.equal(await races.createRace({ ...race, startsAt: Date.parse(race.startsAt) }), 'real-race');
+  assert.equal(JSON.parse(calls.at(-1).options.body).startsAt, '2026-10-23T09:00:00.000Z');
+  assert.equal((await races.getRaceDetail(race.id)).startsAt, Date.parse(race.startsAt));
+  assert.equal((await races.listOpenRaces()).length, 0);
+  assert.equal((await races.listMyRaces())[0].id, race.id);
+  await races.searchRaces({ distanceMeters: 5000, window: 'tomorrow', hideFull: true });
+  assert.equal(calls.at(-1).url.searchParams.get('distanceMeters'), '5000');
+  assert.equal(calls.at(-1).url.searchParams.get('hideFull'), 'true');
+  assert.ok(Number.isFinite(Date.parse(calls.at(-1).url.searchParams.get('from'))));
+  await races.joinRaceByCode(' hi1234 ');
+  assert.equal(JSON.parse(calls.at(-1).options.body).code, 'HI1234');
 });

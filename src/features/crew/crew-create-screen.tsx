@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackHeader } from '@/components/back-header';
@@ -15,6 +15,12 @@ import { CREW_INTRO_MAX_LENGTH, CREW_MAX_MEMBERS, CREW_NAME_MAX_LENGTH } from '.
 
 export function CrewCreateScreen() {
   const router = useRouter();
+  const submitting = useRef(false);
+  const focused = useRef(false);
+  useFocusEffect(useCallback(() => {
+    focused.current = true;
+    return () => { focused.current = false; };
+  }, []));
   const [name, setName] = useState('');
   const [intro, setIntro] = useState('');
   const [region, setRegion] = useState<RegionSelection>({ sido: null, sigungu: null });
@@ -26,6 +32,8 @@ export function CrewCreateScreen() {
   const canSubmit = trimmedName.length >= 2 && region.sido !== null;
 
   const submit = async () => {
+    if (submitting.current || !canSubmit) return;
+    submitting.current = true;
     setSaving(true);
     try {
       const crewId = await createCrew({
@@ -33,9 +41,11 @@ export function CrewCreateScreen() {
         intro,
         region: region.sido ? { sido: region.sido, sigungu: region.sigungu } : null,
       });
-      router.replace({ pathname: '/crew-detail', params: { crewId } });
+      if (focused.current) router.replace({ pathname: '/crew-detail', params: { crewId } });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '크루를 만들지 못했어요.');
+    } finally {
+      submitting.current = false;
       setSaving(false);
     }
   };
@@ -55,6 +65,7 @@ export function CrewCreateScreen() {
             <TextInput
               accessibilityLabel="크루 이름"
               value={name}
+              editable={!saving}
               onChangeText={setName}
               maxLength={CREW_NAME_MAX_LENGTH}
               placeholder="예) 새벽 한강 러너스"
@@ -66,6 +77,7 @@ export function CrewCreateScreen() {
             <TextInput
               accessibilityLabel="크루 소개"
               value={intro}
+              editable={!saving}
               onChangeText={setIntro}
               maxLength={CREW_INTRO_MAX_LENGTH}
               placeholder="어떤 크루인지 한 줄로 알려 주세요"

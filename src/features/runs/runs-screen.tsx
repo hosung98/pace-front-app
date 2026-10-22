@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { PaceErrorDialog, PaceLoadingState } from '@/components/pace-feedback';
+import { PaceErrorDialog, PaceLoadingState, PaceQueryState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { SwipeToDelete } from '@/components/swipe-to-delete';
 import { PaceColors as C } from '@/constants/pace';
@@ -45,7 +45,6 @@ function AccountRuns() {
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [deletedRun, setDeletedRun] = useState<CompletedRun | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const errorMessage = actionErrorMessage ?? loadErrorMessage;
 
   useEffect(() => () => {
     if (undoTimer.current) clearTimeout(undoTimer.current);
@@ -110,6 +109,8 @@ function AccountRuns() {
           </Pressable>
         </View>
       ) : null}>
+      {!isLoading && !loadErrorMessage ? (
+      <>
       <View style={styles.summary}>
         <View>
           <Text style={styles.summaryValue}>{weeklyInsights.distanceKm.toFixed(2)}<Text style={styles.summaryUnit}> km</Text></Text>
@@ -126,8 +127,12 @@ function AccountRuns() {
           <Text style={styles.sectionHint}>← 밀어서 삭제</Text>
         ) : null}
       </View>
+      </>
+      ) : null}
       {isLoading ? (
         showSkeleton ? <PaceLoadingState label="러닝 기록을 불러오는 중" /> : null
+      ) : loadErrorMessage ? (
+        <PaceQueryState loading={false} message={loadErrorMessage} onRetry={() => { void reload(); }} />
       ) : completedRuns.length === 0 ? (
         <View style={[tabScreenStyles.card, styles.emptyCard]}>
           <Text style={styles.emptyTitle}>아직 러닝 기록이 없어요</Text>
@@ -165,7 +170,7 @@ function AccountRuns() {
         </SwipeToDelete>
       ))}
       <PaceErrorDialog
-        message={errorMessage}
+        message={actionErrorMessage}
         onClose={() => {
           setActionErrorMessage(null);
           clearError();

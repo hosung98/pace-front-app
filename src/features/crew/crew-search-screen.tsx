@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackHeader } from '@/components/back-header';
 import { PaceButton } from '@/components/pace-button';
-import { PaceErrorDialog } from '@/components/pace-feedback';
+import { PaceErrorDialog, PaceQueryState } from '@/components/pace-feedback';
 import { PaceIcon } from '@/components/pace-icon';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { searchCrews } from '@/data/crew-repository';
+import { useFocusQuery } from '@/hooks/use-focus-query';
 import { formatKm } from '@/lib/format';
 
 import { LocateRegionButton, RegionPicker, type RegionSelection } from './region-picker';
@@ -18,14 +19,11 @@ import type { CrewSearchItem } from './types';
 
 const QUERY_DEBOUNCE_MS = 300;
 
-type SearchResult = { key: string; items: CrewSearchItem[] } | { key: string; error: string };
-
 export function CrewSearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [region, setRegion] = useState<RegionSelection>({ sido: null, sigungu: null });
-  const [result, setResult] = useState<SearchResult | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,25 +31,12 @@ export function CrewSearchScreen() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  const searchKey = JSON.stringify([debouncedQuery, region.sido, region.sigungu]);
-
-  useEffect(() => {
-    let active = true;
-    searchCrews({ query: debouncedQuery, sido: region.sido, sigungu: region.sigungu })
-      .then((items) => {
-        if (active) setResult({ key: searchKey, items });
-      })
-      .catch((error: unknown) => {
-        console.error('크루 검색 실패', error);
-        if (active) setResult({ key: searchKey, error: '크루를 찾지 못했어요. 잠시 후 다시 시도해 주세요.' });
-      });
-    return () => {
-      active = false;
-    };
-  }, [debouncedQuery, region.sido, region.sigungu, searchKey]);
-
-  const isLoading = result?.key !== searchKey;
-  const items = result && 'items' in result ? result.items : [];
+  const load = useCallback(() => searchCrews({
+    query: debouncedQuery, sido: region.sido, sigungu: region.sigungu,
+  }), [debouncedQuery, region.sido, region.sigungu]);
+  const { data: items, isLoading, errorMessage, reload } = useFocusQuery<CrewSearchItem[]>(
+    load, [], '크루를 불러오지 못했어요. 연결 상태를 확인해 주세요.',
+  );
   const hasFilter = debouncedQuery.length > 0 || region.sido !== null;
 
   return (
@@ -92,18 +77,16 @@ export function CrewSearchScreen() {
           </Text>
           {isLoading ? (
             <ActivityIndicator size="small" color={C.accent} />
-          ) : (
+          ) : !errorMessage ? (
             <Text style={styles.resultCaption}>{items.length}개 · 이번 주 거리 순</Text>
-          )}
+          ) : null}
         </View>
 
-        {result && 'error' in result && !isLoading ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>{result.error}</Text>
-          </View>
+        {errorMessage && !isLoading ? (
+          <PaceQueryState loading={false} message={errorMessage} onRetry={() => { void reload(); }} />
         ) : null}
 
-        {!isLoading && result && 'items' in result && items.length === 0 ? (
+        {!isLoading && !errorMessage && items.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>{hasFilter ? '조건에 맞는 크루가 없어요' : '아직 크루가 없어요'}</Text>
             <Text style={styles.emptyText}>원하는 크루가 없다면 직접 만들어 보세요.</Text>

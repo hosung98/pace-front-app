@@ -7,7 +7,8 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 PACE is a running journal with a dark, mobile-first interface. This first slice
 contains a branded launch splash, three Korean onboarding pages, GPS running,
 and account-connected home, history, statistics, profile, and settings screens.
-Google login is connected on iOS; crew/race remain sample screens.
+Google login is connected on iOS. Crew and race rooms use authenticated backend
+APIs rather than sample data; an empty account can create a crew or race room.
 
 - Next, centered page indicators, and horizontal swipes across the illustration
   and text area navigate the onboarding. Swipe right to go back; there is no back
@@ -26,16 +27,19 @@ Google login is connected on iOS; crew/race remain sample screens.
 - Tab titles remain fixed while the screen content scrolls.
 - The crew tab has two segments. **Crew** shows weekly/monthly crew distance
   rankings, crew detail (member distances, invite code), create, join by invite
-  code or request, and leave (one crew per user). Crews have an activity region
+  code or request, request approval/rejection, leadership transfer, and leave
+  (one crew per user). Crews have an activity region
   (시/도 + 시/군/구, picked from a list — no GPS coordinates are stored), and
   **크루 찾기** searches by name and region ("내 위치로" reverse-geocodes on the
-  device; iOS/Android only). **Race** lists open and joined remote races (same
-  start time, ranked by time to the target distance), with create, join/leave,
-  join by code, host cancel, a start countdown, and results. **대결 찾기**
+  device; iOS/Android only). **Race** lists open and joined race rooms with
+  create, join/leave, join by code, host cancel, and a scheduled-start countdown. **대결 찾기**
   filters open races by distance, start window, and full rooms (races have no
   location).
-  All crew/race data is in-memory sample data (`src/data/crew-repository.ts`,
-  `src/data/race-repository.ts`) and resets when the app restarts.
+  로그인해야 조회·생성·참가할 수 있으며, 직접 상세·생성·검색 경로에 진입해도 인증을 확인합니다.
+  데이터가 없으면 만들기·참가 안내를 표시하고, 조회 실패는 빈 목록과 구분합니다.
+  크루 순위는 서버의 실제 러닝 기록으로 집계합니다.
+  대결의 자동 출발, GPS 결과 제출·검증과 결과 순위 집계는 아직 구현하지 않았습니다.
+  결과가 없는 참가자를 DNS나 가짜 순위로 표시하지 않습니다.
 - 로그인하면 프로필, 주간 목표, 알림 선호, 선호 단위, 공개 범위를 서버에서 조회·저장합니다.
   실제 푸시 발송은 준비 중이며, 러닝 화면의 거리 표시는 아직 km로 고정입니다.
 - GPS routes are first stored locally on the device. Force-quitting the app or
@@ -107,13 +111,33 @@ Validate changes with `npm run lint`, `npx tsc --noEmit`, and
   숨기지 않으며, 오프라인 계정 목록 조회는 현재 지원하지 않습니다.
 - `clientRunId`와 `Idempotency-Key`를 유지해 재전송 중복을 방지합니다.
   계정을 바꿔도 이전 계정의 대기 기록이 다른 계정으로 전송되지 않습니다.
+- GPS 수집 시 러닝 시작 전 캐시, 수신 시각 이후, 역순 샘플은 제외합니다.
+  이전 버전의 미전송 기록은 기기 원본을 유지하며 시작·종료 범위와 시간 순서를
+  만족하는 경로만 전송합니다. 제외 개수는 진단 로그에 남기며 거리·러닝 시간은 변경하지 않습니다.
 - 진행 중인 러닝이 있으면 로그인·로그아웃·탈퇴를 막습니다. 먼저 종료·저장해 주세요.
 - 삭제는 서버 성공을 확인하며 되돌리기도 서버 복구 API를 사용합니다.
   계정 탈퇴는 확인창을 거쳐 서버에 삭제를 요청하고 해당 계정의 기기 캐시와 세션을 정리합니다.
 - 계정 홈·통계는 `Asia/Seoul` 기준입니다. 기기 모드는 기기의 로컬 시간대를 사용합니다.
-- 크루·대결·미디어·실제 푸시는 이번 백엔드 연동 범위가 아닙니다.
+- 크루·대결 방 데이터는 서버에 저장합니다. 미디어 업로드·실제 푸시·대결 GPS 결과 집계는
+  이번 연동 범위가 아닙니다.
+- 마이 탭의 프로필 수정은 별도 화면에서 닉네임(2~30자)과 소개(최대 150자)를 편집합니다.
+  키보드 회피, 입력 길이 안내, 저장 중 중복 요청 방지와 오류 후 재시도를 지원합니다.
+- 홈·기록·통계·프로필은 로딩이나 조회 실패를 가짜 0값·빈 기록으로 표시하지 않습니다.
+  실패 시 화면 내 재시도로 복구할 수 있습니다.
 
-### 이번 변경은 EAS Update만으로 설치할 수 없음
+### 크루·대결 API 배포 순서
+
+이 프론트엔드는 새 크루·대결 API가 필요합니다. **DB와 백엔드를 먼저 배포한 뒤 OTA를 발행**합니다.
+
+1. 백엔드 저장소의 `database/community-schema.sql`을 DBeaver에서 대상 DB에 수동 적용합니다.
+   기존 사용자·러닝 스키마를 지우거나 전체 초기화 SQL을 다시 실행하지 마세요.
+2. 백엔드를 Jenkins/Argo 배포 절차로 배포하고 Swagger에서 `/crews`, `/races`,
+   `/users/me/crew` 경로를 확인합니다.
+3. 인증된 기기에서 빈 목록 → 생성 → 재조회 → 참가·탈퇴를 검증합니다.
+4. 아래 OTA 명령을 실행합니다. EAS의 `production` 환경 선택만으로 개발 API가 운영 API로
+   바뀌지는 않습니다. 배포 대상에 맞는 `EXPO_PUBLIC_API_BASE_URL`을 확인하세요.
+
+### 네이티브 빌드와 후속 EAS Update
 
 Google 네이티브 모듈, iOS URL scheme, SecureStore가 추가되었으므로 **새 iOS 빌드가 필요**합니다.
 `app.json`의 앱 버전은 `1.0.3`, runtimeVersion 정책은 `appVersion`입니다.
@@ -127,7 +151,7 @@ npx eas-cli@latest build --platform ios --profile production
 npx eas-cli@latest submit --platform ios --profile production --latest
 
 # 1.0.3 설치 후 네이티브 변경 없는 JS/UI 수정에만 사용
-npx eas-cli@latest update --channel production --message "PACE API integration"
+npx eas-cli@latest update --channel production --environment production --platform ios --message "Connect crews and races; polish profile UX"
 ```
 
 `development-simulator` 프로필은 시뮬레이터용입니다. iPhone에 설치할 수 없고 Expo Go에도

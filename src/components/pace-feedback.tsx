@@ -80,6 +80,23 @@ export function PaceLoadingState({ label = '불러오는 중' }: PaceLoadingStat
   );
 }
 
+export function PaceQueryState({ loading, message, onRetry }: Readonly<{
+  loading: boolean;
+  message: string | null;
+  onRetry: () => void;
+}>) {
+  if (loading) return <PaceLoadingState />;
+  return (
+    <View style={styles.queryError}>
+      <Text style={styles.errorTitle}>정보를 불러오지 못했어요</Text>
+      <Text style={styles.errorMessage}>{message}</Text>
+      <Pressable accessibilityRole="button" onPress={onRetry} style={styles.closeButton}>
+        <Text style={styles.closeButtonText}>다시 시도</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export function PaceErrorDialog({
   message,
   onClose,
@@ -115,6 +132,7 @@ export function PaceErrorDialog({
 }
 
 const styles = StyleSheet.create({
+  queryError: { marginTop: 20, padding: 24, borderRadius: 20, backgroundColor: C.surface, alignItems: 'center' },
   loading: { paddingBottom: MIN_LOADING_OFFSET },
   loadingLogo: { alignSelf: 'center' },
   loadingLabel: { marginTop: 13, color: C.muted, fontSize: 11, textAlign: 'center' },

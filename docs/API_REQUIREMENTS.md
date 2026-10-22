@@ -14,9 +14,37 @@ PACE 앱(Expo/React Native)이 필요로 하는 백엔드 API, DB 테이블, 구
 
 아래 표와 후속 설계는 초기 API 요구사항입니다. 현재 iOS Google 인증, 계정 프로필·설정,
 러닝 기록·경로·삭제·복구, 홈과 통계를 실제 Spring Boot API에 연결했습니다.
-기기 모드와 크루·대결 목업은 유지합니다. 실제 배포 계약은 서버 OpenAPI가 우선이며,
+기기 모드는 유지하며 크루·대결 목업 저장소는 인증된 API 호출로 교체했습니다.
+실제 배포 계약은 서버 OpenAPI가 우선이며,
 접속 주소·제약·빌드 절차는 [README](../README.md#백엔드-연동과-ios-빌드)를 확인하세요.
 아래 표의 “현재 위치”는 연동 전 기준입니다.
+
+### 현재 크루·대결 연동 범위
+
+아래의 상세 설계에는 미구현 기능도 포함되어 있습니다. 현재 프론트 연동 계약은 다음과 같습니다.
+목록은 페이지 객체가 아닌 배열이며, API 시간은 ISO 문자열, 화면 내부 시간은 epoch ms입니다.
+
+- 크루: `GET /crews/rankings?period=week|month`, `GET /crews?query=&sido=&sigungu=`,
+  `GET /users/me/crew` (`{crewId: string | null}`), `GET /crews/{id}?period=`.
+- 생성·가입: `POST /crews` (`{id}` 응답), `POST /crews/join-by-code` (`{code}` → `{id}`),
+  `POST /crews/{id}/join-requests`, `DELETE /crews/join-requests/me`,
+  `DELETE /crews/{id}/members/me`.
+- 크루장: `POST /crews/{id}/invite-code`, `GET /crews/{id}/join-requests`,
+  `POST /crews/{id}/join-requests/{userId}/approve|reject`,
+  `POST /crews/{id}/leader` (`{userId}`).
+- 대결: `GET /races?scope=open|mine&distanceMeters=&from=&to=&hideFull=`,
+  `GET /races/{id}`, `POST /races` (`{id}`).
+- 참가·취소: `POST /races/{id}/participants`, `DELETE /races/{id}/participants/me`,
+  `POST /races/join-by-code` (`{code}` → `{id}`), `POST /races/{id}/cancel`.
+- 대결 생성 필드: `title`, `distanceMeters`, `startsAt`, `joinDeadlineMinutes`,
+  `minParticipants`, `maxParticipants`, `visibility`. 참가자 결과는 현재 `null`입니다.
+  자동 러닝 시작, GPS 결과 제출·검증, 결과 랭킹은 아직 지원하지 않습니다.
+- 현재 서버 필드는 `isMine`, `isMe`, `isHost`, `isJoined`를 그대로 사용합니다.
+  가입 신청 목록은 `{userId, nickname}[]`입니다.
+- 게스트에게는 로그인 안내, 빈 목록에는 생성 안내, 요청 실패에는 오류와 재시도를 표시합니다.
+  미구현 기능에 샘플·가짜 성공 응답을 사용하지 않습니다.
+- 수동 DB 스키마 적용과 백엔드 배포가 OTA보다 먼저입니다.
+  배포 순서는 [README](../README.md#크루대결-api-배포-순서)를 따릅니다.
 
 | 데이터 | 현재 위치 | 저장소 코드 | 백엔드 연결 후 |
 | --- | --- | --- | --- |

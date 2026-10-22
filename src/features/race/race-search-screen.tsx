@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,17 +6,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackHeader } from '@/components/back-header';
 import { ChoiceChips } from '@/components/choice-chips';
 import { PaceButton } from '@/components/pace-button';
+import { PaceQueryState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { searchRaces } from '@/data/race-repository';
 import { useNow } from '@/hooks/use-now';
+import { useFocusQuery } from '@/hooks/use-focus-query';
 
 import { RaceCard } from './race-card';
 import { formatRaceDistance } from './race-status';
 import {
   RACE_DISTANCE_OPTIONS_METERS,
   RACE_SOON_WINDOW_HOURS,
-  type RaceSearchParams,
   type RaceSummary,
   type RaceTimeWindow,
 } from './types';
@@ -36,40 +37,18 @@ const WINDOW_OPTIONS: { value: RaceTimeWindow; label: string }[] = [
   { value: 'weekend', label: '주말' },
 ];
 
-type SearchResult = { key: string; items: RaceSummary[] } | { key: string; error: string };
-
 export function RaceSearchScreen() {
   const router = useRouter();
   const now = useNow(30_000);
   const [distance, setDistance] = useState<number>(ANY_DISTANCE);
   const [timeWindow, setTimeWindow] = useState<RaceTimeWindow>('all');
   const [hideFull, setHideFull] = useState(true);
-  const [result, setResult] = useState<SearchResult | null>(null);
-
-  const searchKey = JSON.stringify([distance, timeWindow, hideFull]);
-
-  useEffect(() => {
-    let active = true;
-    const params: RaceSearchParams = {
-      distanceMeters: distance === ANY_DISTANCE ? null : distance,
-      window: timeWindow,
-      hideFull,
-    };
-    searchRaces(params)
-      .then((items) => {
-        if (active) setResult({ key: searchKey, items });
-      })
-      .catch((error: unknown) => {
-        console.error('대결 검색 실패', error);
-        if (active) setResult({ key: searchKey, error: '대결을 찾지 못했어요. 잠시 후 다시 시도해 주세요.' });
-      });
-    return () => {
-      active = false;
-    };
-  }, [distance, timeWindow, hideFull, searchKey]);
-
-  const isLoading = result?.key !== searchKey;
-  const items = result && 'items' in result ? result.items : [];
+  const load = useCallback(() => searchRaces({
+    distanceMeters: distance === ANY_DISTANCE ? null : distance, window: timeWindow, hideFull,
+  }), [distance, timeWindow, hideFull]);
+  const { data: items, isLoading, errorMessage, reload } = useFocusQuery<RaceSummary[]>(
+    load, [], '대결 목록을 불러오지 못했어요. 연결 상태를 확인해 주세요.',
+  );
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -105,18 +84,16 @@ export function RaceSearchScreen() {
           <Text style={styles.resultTitle}>모집 중인 대결</Text>
           {isLoading ? (
             <ActivityIndicator size="small" color={C.accent} />
-          ) : (
+          ) : !errorMessage ? (
             <Text style={styles.resultCaption}>{items.length}개 · 시작 시간 순</Text>
-          )}
+          ) : null}
         </View>
 
-        {result && 'error' in result && !isLoading ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>{result.error}</Text>
-          </View>
+        {errorMessage && !isLoading ? (
+          <PaceQueryState loading={false} message={errorMessage} onRetry={() => { void reload(); }} />
         ) : null}
 
-        {!isLoading && result && 'items' in result && items.length === 0 ? (
+        {!isLoading && !errorMessage && items.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>조건에 맞는 대결이 없어요</Text>
             <Text style={styles.emptyText}>원하는 시간에 직접 방을 만들어 러너를 모아 보세요.</Text>

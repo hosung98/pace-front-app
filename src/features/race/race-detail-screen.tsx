@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackHeader } from '@/components/back-header';
 import { PaceButton } from '@/components/pace-button';
-import { PaceErrorDialog, PaceLoadingState } from '@/components/pace-feedback';
+import { PaceErrorDialog, PaceQueryState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { cancelRace, getRaceDetail, joinRace, leaveRace } from '@/data/race-repository';
@@ -22,7 +22,6 @@ import {
   getRaceStatus,
 } from './race-status';
 import {
-  RACE_LATE_START_GRACE_SECONDS,
   RACE_TIME_LIMIT_MINUTES_PER_KM,
   type RaceDetail,
   type RaceParticipant,
@@ -30,7 +29,7 @@ import {
   type RaceStatus,
 } from './types';
 
-type LoadState = { key: string; race: RaceDetail | null };
+type LoadState = { key: string; race: RaceDetail | null; error?: string };
 
 function secondsUntil(target: number, now: number): number {
   return Math.max(0, Math.ceil((target - now) / 1000));
@@ -38,6 +37,7 @@ function secondsUntil(target: number, now: number): number {
 
 export function RaceDetailScreen() {
   const { raceId } = useLocalSearchParams<{ raceId?: string }>();
+  const submitting = useRef(false);
   const now = useNow(1000);
   const [version, setVersion] = useState(0);
   const [state, setState] = useState<LoadState | null>(null);
@@ -56,7 +56,7 @@ export function RaceDetailScreen() {
       })
       .catch((error: unknown) => {
         console.error('Unable to load the race detail.', error);
-        if (!cancelled) setState({ key, race: null });
+        if (!cancelled) setState({ key, race: null, error: error instanceof Error ? error.message : '대결을 불러오지 못했어요.' });
       });
     return () => {
       cancelled = true;
@@ -64,6 +64,8 @@ export function RaceDetailScreen() {
   }, [raceId, key]);
 
   const runAction = async (action: () => Promise<unknown>) => {
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     try {
       await action();
@@ -71,21 +73,21 @@ export function RaceDetailScreen() {
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '요청을 처리하지 못했어요.');
     } finally {
+      submitting.current = false;
       setBusy(false);
       setConfirmCancel(false);
     }
   };
 
-  const race = state?.race ?? null;
+  const race = state?.key === key ? state.race : null;
 
   if (!race) {
     return (
       <SafeAreaView style={styles.screen}>
         <View style={styles.content}>
           <BackHeader backLabel="대결 목록으로 돌아가기" />
-          {state === null && raceId ? <PaceLoadingState label="대결 불러오는 중" /> : (
-            <Text style={styles.missing}>대결을 찾을 수 없어요.</Text>
-          )}
+          <PaceQueryState loading={Boolean(raceId) && state?.key !== key} message={state?.error ?? '대결을 찾을 수 없어요.'}
+            onRetry={() => setVersion((value) => value + 1)} />
         </View>
       </SafeAreaView>
     );
@@ -102,7 +104,6 @@ export function RaceDetailScreen() {
         <View style={styles.badgeRow}>
           <RaceStatusBadge status={status} />
           {race.visibility === 'private' ? <Text style={styles.tag}>비공개</Text> : <Text style={styles.tag}>공개</Text>}
-          <Text style={styles.sample}>샘플 데이터</Text>
         </View>
         <Text style={styles.title}>{race.title}</Text>
         <Text style={styles.host}>방장 {race.hostNickname}{race.isHost ? ' (나)' : ''}</Text>
@@ -129,11 +130,12 @@ export function RaceDetailScreen() {
           </View>
         ) : null}
 
-        {status === 'finished' ? (
+        {status === 'finished' && race.participants.some((participant) => participant.result) ? (
           <Results participants={race.participants} distanceMeters={race.distanceMeters} />
         ) : (
           <Participants participants={race.participants} />
         )}
+        <Text style={styles.host}>현재 방 생성·참가를 지원합니다. 자동 출발·GPS 결과 등록·순위 산정은 준비 중이에요.</Text>
 
         <View style={styles.actions}>
           {canJoinRace(race, now) ? (
@@ -194,7 +196,7 @@ function Hero({ race, status, now }: Readonly<{ race: RaceDetail; status: RaceSt
           </Text>
           <Text style={styles.heroCaption}>
             {race.isJoined
-              ? '대결이 확정됐어요. 출발 10초 전 카운트다운 후 러닝이 자동으로 시작돼요. 앱을 열어 두세요.'
+              ? '출발 예정 시간이에요. 현재 자동 러닝 시작과 대결 기록 제출은 지원하지 않아요.'
               : '대결이 확정되어 더 이상 참가할 수 없어요.'}
           </Text>
         </View>
@@ -207,8 +209,8 @@ function Hero({ race, status, now }: Readonly<{ race: RaceDetail; status: RaceSt
           <Text style={styles.heroTime}>{formatDuration(secondsUntil(getRaceEndsAt(race), now))}</Text>
           <Text style={styles.heroCaption}>
             {race.isJoined
-              ? '다른 참가자의 위치는 보이지 않아요. 목표 거리를 완주하면 기록이 자동 제출돼요.'
-              : '참가자들이 각자의 장소에서 달리고 있어요. 종료 후 순위가 공개돼요.'}
+              ? '출발 시간이 됐어요. 현재 GPS 결과 자동 제출은 지원하지 않아요.'
+              : '예정된 대결 시간이에요. 실시간 위치와 결과 순위는 제공하지 않아요.'}
           </Text>
         </View>
       );
@@ -219,9 +221,7 @@ function Hero({ race, status, now }: Readonly<{ race: RaceDetail; status: RaceSt
         <View style={[styles.hero, styles.heroCancelled]}>
           <Text style={styles.heroCancelledTitle}>대결이 취소됐어요</Text>
           <Text style={styles.heroCaption}>
-            {race.participantCount < race.minParticipants
-              ? `모집 마감까지 최소 인원(${race.minParticipants}명)이 모이지 않아 자동으로 취소됐어요.`
-              : '방장이 대결을 취소했어요.'}
+            취소된 대결이에요. 다른 방을 찾거나 새로 만들어 보세요.
           </Text>
         </View>
       );
@@ -295,13 +295,13 @@ function compareResults(a: RaceParticipant, b: RaceParticipant): number {
 }
 
 function Results({ participants, distanceMeters }: Readonly<{ participants: RaceParticipant[]; distanceMeters: number }>) {
-  const sorted = [...participants].sort(compareResults);
+  const sorted = participants.filter((participant) => participant.result !== null).sort(compareResults);
   const winner = sorted[0];
 
   return (
     <>
-      <Text style={styles.sectionTitle}>최종 순위</Text>
-      {winner?.result?.finishSeconds ? (
+      <Text style={styles.sectionTitle}>등록된 결과</Text>
+      {winner?.result?.rank === 1 && winner.result.finishSeconds !== null ? (
         <View style={styles.winnerCard}>
           <Text style={styles.winnerLabel}>🏆 1위</Text>
           <Text style={styles.winnerName}>{winner.nickname}{winner.isMe ? ' (나)' : ''}</Text>
@@ -335,8 +335,7 @@ function Results({ participants, distanceMeters }: Readonly<{ participants: Race
         })}
       </View>
       <Text style={styles.footnote}>
-        출발 시각부터 목표 거리에 도달할 때까지 걸린 시간으로 순위를 매겨요. 출발 후 {RACE_LATE_START_GRACE_SECONDS}초
-        안에 시작하지 않으면 불참(DNS)이고, GPS 기록이 비정상이면 실격 처리돼요.
+        서버에서 확인된 결과만 표시합니다. 아직 결과가 없는 참가자는 순위에 포함하지 않아요.
       </Text>
     </>
   );
@@ -377,7 +376,7 @@ const styles = StyleSheet.create({
   mineRow: { marginHorizontal: -16, paddingHorizontal: 16, backgroundColor: '#1C2117' },
   avatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: C.raised },
   avatarText: { color: C.text, fontSize: 13, fontWeight: '700' },
-  personName: { color: C.text, fontSize: 13, fontWeight: '600' },
+  personName: { flexShrink: 1, color: C.text, fontSize: 13, fontWeight: '600' },
   hostTag: { color: C.accent, fontSize: 9, fontWeight: '700' },
   meTag: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5, overflow: 'hidden', color: C.accentInk, backgroundColor: C.accent, fontSize: 9, fontWeight: '700' },
   meInline: { color: C.accent, fontSize: 10, fontWeight: '700' },

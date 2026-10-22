@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import { PaceBrand, PaceMark } from '@/components/pace-brand';
-import { PaceErrorDialog } from '@/components/pace-feedback';
+import { PaceQueryState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { getActiveRunSnapshot, subscribeToActiveRun } from '@/data/active-run-store';
@@ -208,7 +208,7 @@ function RecentRunCard({ recentRun }: { recentRun: CompletedRun | null }) {
 export function HomeScreen() {
   const router = useRouter();
   const { session } = useSession();
-  const { data, errorMessage, clearError } = useFocusQuery(
+  const { data, errorMessage, isLoading, reload } = useFocusQuery(
     getHomeData,
     { weekly: { distanceKm: 0, runCount: 0, dailyDistancesKm: new Array<number>(7).fill(0) },
       todayKm: 0, recent: null as CompletedRun | null, weekStart: getWeekStart(new Date()), goalKm: DEFAULT_WEEKLY_GOAL_KM },
@@ -227,7 +227,7 @@ export function HomeScreen() {
           </View>
         </View>
         <View style={styles.greeting}>
-          <Text style={styles.greetingEyebrow}>GOOD MORNING</Text>
+          <Text style={styles.greetingEyebrow}>YOUR DAILY PACE</Text>
           <Text style={styles.greetingTitle}>오늘도 나만의 페이스로.</Text>
           <Text style={styles.greetingDescription}>
             작은 한 걸음이 멋진 기록이 돼요.
@@ -239,6 +239,10 @@ export function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
         <View style={styles.container}>
+          {isLoading || errorMessage ? (
+            <PaceQueryState loading={isLoading} message={errorMessage} onRetry={() => { void reload(); }} />
+          ) : (
+          <>
           <TodayRunCard
             onStartRun={() => router.push('/run-tracking')}
             distanceKm={todayDistanceKm}
@@ -267,12 +271,10 @@ export function HomeScreen() {
             이번 주는 {weekStart.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })} 시작 기준이에요.
             {session ? ' 계정 통계는 한국 시간 기준입니다.' : ' 로그인 전 기록은 기기에 보관됩니다.'}
           </Text>
+          </>
+          )}
         </View>
       </ScrollView>
-      <PaceErrorDialog
-        message={errorMessage}
-        onClose={clearError}
-      />
     </SafeAreaView>
   );
 }

@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackHeader } from '@/components/back-header';
+import { PaceConfirmDialog } from '@/components/pace-confirm-dialog';
 import { PaceButton } from '@/components/pace-button';
-import { PaceErrorDialog, PaceLoadingState } from '@/components/pace-feedback';
+import { PaceErrorDialog, PaceQueryState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { SegmentedControl } from '@/components/segmented-control';
 import { PaceColors as C } from '@/constants/pace';
@@ -15,6 +16,10 @@ import {
   leaveCrew,
   regenerateCrewInviteCode,
   requestToJoinCrew,
+  getCrewJoinRequests,
+  reviewCrewJoinRequest,
+  transferCrewLeadership,
+  type CrewJoinRequest,
 } from '@/data/crew-repository';
 import { formatKm } from '@/lib/format';
 
@@ -26,9 +31,16 @@ const PERIOD_OPTIONS = [
   { value: 'month', label: '이번 달' },
 ] as const;
 
-type LoadState = { key: string; detail: CrewDetail | null };
+type LoadState = { key: string; detail: CrewDetail | null; requests: CrewJoinRequest[]; error?: string };
 
 export function CrewDetailScreen() {
+  const router = useRouter();
+  const submitting = useRef(false);
+  const focused = useRef(false);
+  useFocusEffect(useCallback(() => {
+    focused.current = true;
+    return () => { focused.current = false; };
+  }, []));
   const { crewId } = useLocalSearchParams<{ crewId?: string }>();
   const [period, setPeriod] = useState<CrewPeriod>('week');
   const [version, setVersion] = useState(0);
@@ -36,6 +48,7 @@ export function CrewDetailScreen() {
   const [busy, setBusy] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [transferTarget, setTransferTarget] = useState<CrewJoinRequest | null>(null);
 
   const key = `${crewId}:${period}:${version}`;
 
@@ -43,42 +56,50 @@ export function CrewDetailScreen() {
     if (!crewId) return;
     let cancelled = false;
     getCrewDetail(crewId, period)
-      .then((detail) => {
-        if (!cancelled) setState({ key, detail });
+      .then(async (detail) => {
+        const requests = detail.membership === 'leader' ? await getCrewJoinRequests(detail.id) : [];
+        if (!cancelled) setState({ key, detail, requests });
       })
       .catch((error: unknown) => {
         console.error('Unable to load the crew detail.', error);
-        if (!cancelled) setState({ key, detail: null });
+        if (!cancelled) setState({ key, detail: null, requests: [], error: error instanceof Error ? error.message : '크루를 불러오지 못했어요.' });
       });
     return () => {
       cancelled = true;
     };
   }, [crewId, period, key]);
 
-  const runAction = async (action: () => Promise<unknown>) => {
+  const runAction = async (action: () => Promise<unknown>, onSuccess?: () => void) => {
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     try {
       await action();
-      setVersion((value) => value + 1);
+      if (onSuccess) {
+        if (focused.current) onSuccess();
+      } else {
+        setVersion((value) => value + 1);
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '요청을 처리하지 못했어요.');
     } finally {
+      submitting.current = false;
       setBusy(false);
       setConfirmLeave(false);
+      setTransferTarget(null);
     }
   };
 
-  const detail = state?.detail ?? null;
-  const isFirstLoad = Boolean(crewId) && state === null;
+  const detail = state?.key === key ? state.detail : null;
+  const isFirstLoad = Boolean(crewId) && state?.key !== key;
 
   if (!detail) {
     return (
       <SafeAreaView style={styles.screen}>
         <View style={styles.content}>
           <BackHeader backLabel="크루 목록으로 돌아가기" />
-          {isFirstLoad ? <PaceLoadingState label="크루 불러오는 중" /> : (
-            <Text style={styles.missing}>크루를 찾을 수 없어요.</Text>
-          )}
+          <PaceQueryState loading={isFirstLoad} message={state?.error ?? '크루를 찾을 수 없어요.'}
+            onRetry={() => setVersion((value) => value + 1)} />
         </View>
       </SafeAreaView>
     );
@@ -93,9 +114,6 @@ export function CrewDetailScreen() {
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <BackHeader backLabel="크루 목록으로 돌아가기" />
-        <View style={styles.previewBadge}>
-          <Text style={styles.previewLabel}>샘플 데이터</Text>
-        </View>
         <Text style={styles.eyebrow}>CREW</Text>
         <Text style={styles.title}>{detail.name}</Text>
         {detail.intro ? <Text style={styles.intro}>{detail.intro}</Text> : null}
@@ -134,7 +152,22 @@ export function CrewDetailScreen() {
             <Text style={styles.requestText}>
               가입 신청 <Text style={styles.requestCount}>{detail.pendingRequestCount}건</Text> 대기 중
             </Text>
-            <Text style={styles.cardCaption}>신청 승인·거절은 백엔드 연동 후 사용할 수 있어요.</Text>
+            {state?.requests.map((request) => (
+              <View key={request.userId} style={styles.requestRow}>
+                <Text style={styles.memberName}>{request.nickname}</Text>
+                <PaceButton label="승인" loading={busy} style={styles.smallButton}
+                  onPress={() => void runAction(() => reviewCrewJoinRequest(detail.id, request.userId, true))} />
+                <PaceButton label="거절" variant="secondary" loading={busy} style={styles.smallButton}
+                  onPress={() => void runAction(() => reviewCrewJoinRequest(detail.id, request.userId, false))} />
+              </View>
+            ))}
+            {detail.members.filter((member) => !member.isMe).map((member) => (
+              <View key={member.userId} style={styles.requestRow}>
+                <Text style={styles.memberName}>{member.nickname}</Text>
+                <PaceButton label="크루장 위임" variant="secondary" loading={busy} style={styles.smallButton}
+                  onPress={() => setTransferTarget({ userId: member.userId, nickname: member.nickname })} />
+              </View>
+            ))}
           </View>
         ) : null}
 
@@ -203,13 +236,17 @@ export function CrewDetailScreen() {
                   setConfirmLeave(true);
                   return;
                 }
-                void runAction(() => leaveCrew(detail.id));
+                void runAction(() => leaveCrew(detail.id), () => router.replace('/crew'));
               }}
             />
           ) : null}
         </View>
       </ScrollView>
       <PaceErrorDialog message={errorMessage} onClose={() => setErrorMessage(null)} title="요청 실패" />
+      <PaceConfirmDialog visible={transferTarget !== null} title="크루장을 위임할까요?"
+        message={`${transferTarget?.nickname ?? ''}님이 새 크루장이 됩니다. 이후에는 초대 코드와 가입 신청을 관리할 수 없어요.`}
+        onCancel={() => setTransferTarget(null)}
+        onConfirm={() => { if (transferTarget) void runAction(() => transferCrewLeadership(detail.id, transferTarget.userId)); }} />
     </SafeAreaView>
   );
 }
@@ -227,6 +264,7 @@ function Stat({ value, unit, label, highlight = false }: Readonly<{ value: strin
 }
 
 const styles = StyleSheet.create({
+  requestRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 14 },
   screen: { flex: 1, backgroundColor: C.background },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 40 },
   missing: { marginTop: 40, color: C.muted, fontSize: 13, textAlign: 'center' },
@@ -248,7 +286,7 @@ const styles = StyleSheet.create({
   card: { marginTop: 14, padding: 18, borderRadius: 20, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   cardTitle: { color: C.text, fontSize: 14, fontWeight: '700' },
   cardCaption: { marginTop: 8, color: C.subtle, fontSize: 11, lineHeight: 16 },
-  codeRow: { marginTop: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  codeRow: { marginTop: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'center', justifyContent: 'space-between' },
   codeLabel: { color: C.subtle, fontSize: 10 },
   code: { marginTop: 3, color: C.accent, fontSize: 22, fontWeight: '700', letterSpacing: 3 },
   smallButton: { minHeight: 40, paddingHorizontal: 14 },
@@ -265,8 +303,8 @@ const styles = StyleSheet.create({
   avatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: C.raised },
   avatarText: { color: C.text, fontSize: 13, fontWeight: '700' },
   memberBody: { flex: 1, gap: 7 },
-  memberNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  memberName: { color: C.text, fontSize: 13, fontWeight: '600' },
+  memberNameRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
+  memberName: { flexShrink: 1, color: C.text, fontSize: 13, fontWeight: '600' },
   leaderTag: { color: C.accent, fontSize: 9, fontWeight: '700' },
   meTag: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5, overflow: 'hidden', color: C.accentInk, backgroundColor: C.accent, fontSize: 9, fontWeight: '700' },
   barTrack: { height: 4, borderRadius: 2, backgroundColor: C.raised },

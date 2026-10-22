@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 
 import { PaceButton } from '@/components/pace-button';
@@ -12,12 +12,15 @@ type InviteCodeFormProps = Readonly<{
 }>;
 
 /** Code entry + submit. `onSubmit` should throw an Error whose message is shown inline. */
-export function InviteCodeForm({ label, placeholder = '초대 코드 6자리', onSubmit }: InviteCodeFormProps) {
+export function InviteCodeForm({ label, placeholder = '초대 코드를 입력해 주세요', onSubmit }: InviteCodeFormProps) {
+  const pending = useRef(false);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
+    if (pending.current || !code.trim()) return;
+    pending.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -26,6 +29,7 @@ export function InviteCodeForm({ label, placeholder = '초대 코드 6자리', o
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : '참가하지 못했어요.');
     } finally {
+      pending.current = false;
       setSubmitting(false);
     }
   };
@@ -36,6 +40,7 @@ export function InviteCodeForm({ label, placeholder = '초대 코드 6자리', o
         <TextInput
           accessibilityLabel={label}
           value={code}
+          editable={!submitting}
           onChangeText={(text) => {
             setCode(text.toUpperCase());
             setError(null);

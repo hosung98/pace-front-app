@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 
 import { InviteCodeForm } from '@/components/invite-code-form';
 import { PaceButton } from '@/components/pace-button';
-import { PaceLoadingState } from '@/components/pace-feedback';
+import { PaceQueryState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { SearchEntry } from '@/components/search-entry';
 import { PaceColors as C } from '@/constants/pace';
@@ -30,12 +30,12 @@ const EMPTY: RaceHome = { mine: [], open: [] };
 export function RaceSection() {
   const router = useRouter();
   const now = useNow(30_000);
-  const { data, isLoading } = useFocusQuery(loadRaceHome, EMPTY, '대결 목록을 불러오지 못했어요.');
+  const { data, isLoading, errorMessage, reload } = useFocusQuery(loadRaceHome, EMPTY, '대결 목록을 불러오지 못했어요.');
 
   const openRace = (raceId: string) => router.push({ pathname: '/race-detail', params: { raceId } });
 
-  if (isLoading && data.mine.length === 0 && data.open.length === 0) {
-    return <PaceLoadingState label="대결 불러오는 중" />;
+  if (isLoading || errorMessage) {
+    return <PaceQueryState loading={isLoading} message={errorMessage} onRetry={() => { void reload(); }} />;
   }
 
   const upcoming = data.mine
@@ -51,7 +51,8 @@ export function RaceSection() {
       <View style={[shared.card, styles.howCard]}>
         <Text style={styles.howTitle}>각자 있는 곳에서, 같은 시간에 출발</Text>
         <Text style={[shared.muted, styles.howBody]}>
-          시작 시간이 되면 카운트다운 후 러닝이 자동으로 시작돼요. 목표 거리를 가장 빨리 달린 순서로 순위가 정해지고, 마감 전까지 최소 인원이 모이지 않으면 자동으로 취소돼요.
+          거리와 출발 시간을 정하고 참가자를 모아보세요. 마감 전까지 최소 인원이 모이지 않으면 취소돼요.
+          {'\n'}현재 방 생성·참가를 지원하며, 자동 러닝 시작·GPS 결과 등록과 순위 산정은 준비 중이에요.
         </Text>
         <PaceButton label="대결 방 만들기" onPress={() => router.push('/race-create')} style={styles.createButton} />
         <Text style={styles.orLabel}>비공개 방 초대 코드</Text>

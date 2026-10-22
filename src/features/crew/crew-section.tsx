@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 
 import { InviteCodeForm } from '@/components/invite-code-form';
 import { PaceButton } from '@/components/pace-button';
-import { PaceLoadingState } from '@/components/pace-feedback';
+import { PaceQueryState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { SearchEntry } from '@/components/search-entry';
 import { SegmentedControl } from '@/components/segmented-control';
@@ -41,15 +41,15 @@ const EMPTY: CrewHome = { myCrewId: null, rankings: { week: [], month: [] } };
 export function CrewSection() {
   const router = useRouter();
   const [period, setPeriod] = useState<CrewPeriod>('week');
-  const { data, isLoading } = useFocusQuery(loadCrewHome, EMPTY, '크루 정보를 불러오지 못했어요.');
+  const { data, isLoading, errorMessage, reload } = useFocusQuery(loadCrewHome, EMPTY, '크루 정보를 불러오지 못했어요.');
 
   const openCrew = (crewId: string) => router.push({ pathname: '/crew-detail', params: { crewId } });
 
-  if (isLoading && data.rankings.week.length === 0) return <PaceLoadingState label="크루 불러오는 중" />;
+  if (isLoading || errorMessage) return <PaceQueryState loading={isLoading} message={errorMessage} onRetry={() => { void reload(); }} />;
 
   const rankings = data.rankings[period];
   const myCrew = rankings.find((crew) => crew.isMine);
-  const topDistance = rankings[0]?.distanceMeters ?? 1;
+  const topDistance = Math.max(rankings[0]?.distanceMeters ?? 0, 1);
 
   return (
     <View>
@@ -113,6 +113,12 @@ export function CrewSection() {
       <SegmentedControl options={PERIOD_OPTIONS} value={period} onChange={setPeriod} />
 
       <View style={[shared.card, styles.rankingCard]}>
+        {rankings.length === 0 ? (
+          <View style={styles.emptyRanking}>
+            <Text style={shared.cardTitle}>아직 등록된 크루가 없어요</Text>
+            <Text style={[shared.muted, styles.cardBody]}>첫 크루를 만들고 함께 달릴 멤버를 초대해 보세요.</Text>
+          </View>
+        ) : null}
         {rankings.map((crew, index) => (
           <Pressable
             key={crew.id}
@@ -148,6 +154,7 @@ export function CrewSection() {
 }
 
 const styles = StyleSheet.create({
+  emptyRanking: { paddingVertical: 20 },
   pressed: { opacity: 0.8 },
   myCrewCard: {
     marginTop: 14,
