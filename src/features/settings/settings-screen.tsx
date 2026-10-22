@@ -5,13 +5,56 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackHeader } from '@/components/back-header';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
+import { PaceErrorDialog } from '@/components/pace-feedback';
+import { PaceConfirmDialog } from '@/components/pace-confirm-dialog';
+import { deleteAccount as deleteServerAccount, getSettings, patchSettings, type SettingsPatch } from '@/data/account-repository';
+import { readActiveRun } from '@/data/active-run-store';
+import { getSessionState, useSession } from '@/features/auth/session-store';
+import { useFocusQuery } from '@/hooks/use-focus-query';
+import { errorMessage as describeError } from '@/lib/api-transport';
+import { useRouter } from 'expo-router';
+
+async function loadSettings() {
+  return getSessionState().session ? getSettings() : null;
+}
 
 export function SettingsScreen() {
-  const [runReminders, setRunReminders] = useState(true);
-  const [weeklySummary, setWeeklySummary] = useState(true);
-  const [privateProfile, setPrivateProfile] = useState(false);
-  const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('km');
+  const { session } = useSession();
+  return <AccountSettings key={session?.user.id ?? 'guest'} />;
+}
+
+function AccountSettings() {
+  const router = useRouter();
+  const { session } = useSession();
+  const { data: settings, errorMessage, clearError, isLoading, setData } = useFocusQuery(
+    loadSettings, null, '설정을 불러오지 못했어요. 연결 상태를 확인해 주세요.',
+  );
+  const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const runReminders = settings?.notifications.runReminder ?? true;
+  const weeklySummary = settings?.notifications.weeklySummary ?? true;
+  const privateProfile = settings?.profileVisibility === 'private';
+  const distanceUnit = settings?.distanceUnit ?? 'km';
   const [message, setMessage] = useState('');
+  const update = async (patch: SettingsPatch) => {
+    if (!session) { setMessage('설정을 계정에 저장하려면 먼저 로그인해 주세요.'); return; }
+    setBusy(true);
+    try { setData(await patchSettings(patch)); }
+    catch (error) { setMessage(describeError(error, '설정을 저장하지 못했어요.')); }
+    finally { setBusy(false); }
+  };
+
+  const deleteAccount = async () => {
+    setConfirmDelete(false);
+    setBusy(true);
+    try {
+      if (await readActiveRun()) throw new Error('러닝을 종료하고 저장한 뒤 탈퇴해 주세요.');
+      await deleteServerAccount();
+      router.replace('/login');
+    } catch (error) { setMessage(describeError(error, '계정을 삭제하지 못했어요.')); }
+    finally { setBusy(false); }
+  };
+  const disabled = busy || isLoading || !session || !settings;
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -27,16 +70,18 @@ export function SettingsScreen() {
         <View style={styles.card}>
           <SettingSwitch
             title="러닝 리마인더"
-            detail="달리기를 시작할 시간에 알려드려요."
+            detail="계정에 알림 선호를 저장해요. 실제 발송은 준비 중이에요."
             value={runReminders}
-            onValueChange={setRunReminders}
+            disabled={disabled}
+            onValueChange={(value) => { void update({ notifications: { runReminder: value } }); }}
           />
           <View style={styles.divider} />
           <SettingSwitch
             title="주간 리포트"
-            detail="매주 러닝 요약을 받아보세요."
+            detail="주간 요약 알림 설정이에요. 실제 발송은 준비 중이에요."
             value={weeklySummary}
-            onValueChange={setWeeklySummary}
+            disabled={disabled}
+            onValueChange={(value) => { void update({ notifications: { weeklySummary: value } }); }}
           />
         </View>
 
@@ -44,7 +89,7 @@ export function SettingsScreen() {
         <View style={styles.card}>
           <View style={styles.unitHeading}>
             <Text style={styles.settingTitle}>거리 단위</Text>
-            <Text style={styles.settingDetail}>기록과 통계에 표시할 단위</Text>
+            <Text style={styles.settingDetail}>계정의 선호 단위 (현재 러닝 화면은 km로 표시)</Text>
           </View>
           <View style={styles.unitSelector}>
             {(['km', 'mi'] as const).map((unit) => (
@@ -52,7 +97,8 @@ export function SettingsScreen() {
                 key={unit}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: distanceUnit === unit }}
-                onPress={() => setDistanceUnit(unit)}
+                disabled={disabled}
+                onPress={() => { void update({ distanceUnit: unit }); }}
                 style={[styles.unitButton, distanceUnit === unit && styles.unitButtonActive]}>
                 <View style={styles.radioIndicator}>
                   {distanceUnit === unit ? <View style={styles.radioSelected} /> : null}
@@ -72,14 +118,16 @@ export function SettingsScreen() {
         <View style={styles.card}>
           <SettingSwitch
             title="비공개 프로필"
-            detail="친구가 아닌 사람에게 내 기록을 숨겨요."
+            detail="계정의 공개 범위를 저장해요. 크루·대결 공개 기능은 준비 중이에요."
             value={privateProfile}
-            onValueChange={setPrivateProfile}
+            disabled={disabled}
+            onValueChange={(value) => { void update({ profileVisibility: value ? 'private' : 'public' }); }}
           />
           <View style={styles.divider} />
           <Pressable
             accessibilityRole="button"
-            onPress={() => setMessage('계정 및 데이터 삭제는 백엔드 연동 후 제공할 예정이에요.')}
+            disabled={disabled}
+            onPress={() => setConfirmDelete(true)}
             style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}>
             <View style={styles.actionCopy}>
               <Text style={styles.settingTitle}>계정 및 데이터 삭제</Text>
@@ -89,8 +137,12 @@ export function SettingsScreen() {
           </Pressable>
         </View>
         {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}
-        <Text style={styles.note}>설정은 미리보기 상태이며 아직 계정에 저장되지 않습니다.</Text>
+        <Text style={styles.note}>{session ? '변경한 설정은 계정에 저장됩니다.' : '로그인 후 계정 설정과 탈퇴 기능을 사용할 수 있어요.'}</Text>
       </ScrollView>
+      <PaceErrorDialog message={errorMessage} onClose={clearError} />
+      <PaceConfirmDialog visible={confirmDelete} title="계정을 삭제할까요?"
+        message="계정과 서버에 저장된 러닝·GPS 경로가 영구 삭제됩니다. 이 작업은 되돌릴 수 없어요."
+        onCancel={() => setConfirmDelete(false)} onConfirm={() => { void deleteAccount(); }} />
     </SafeAreaView>
   );
 }
@@ -100,11 +152,13 @@ function SettingSwitch({
   detail,
   value,
   onValueChange,
+  disabled,
 }: {
   title: string;
   detail: string;
   value: boolean;
   onValueChange: (value: boolean) => void;
+  disabled: boolean;
 }) {
   return (
     <View style={styles.settingRow}>
@@ -116,6 +170,7 @@ function SettingSwitch({
         accessibilityRole="switch"
         accessibilityLabel={title}
         accessibilityState={{ checked: value }}
+        disabled={disabled}
         onPress={() => onValueChange(!value)}
         style={[styles.switchTrack, value && styles.switchTrackActive]}>
         <View style={[styles.switchThumb, value && styles.switchThumbActive]} />

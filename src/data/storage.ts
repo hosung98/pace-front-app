@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   activeRun: '@pace/active-run',
   completedRuns: '@pace/completed-runs',
   weeklyGoalKm: '@pace/weekly-goal-km',
+  runSync: '@pace/run-sync-v1',
 } as const;
 
 type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

@@ -12,6 +12,7 @@ type TabScreenShellProps = PropsWithChildren<{
   description: string;
   disclaimer?: string;
   overlay?: ReactNode;
+  badge?: string;
 }>;
 
 export function TabScreenShell({
@@ -20,6 +21,7 @@ export function TabScreenShell({
   description,
   disclaimer = '화면과 데이터는 백엔드 연동 전 미리보기입니다.',
   overlay,
+  badge = '미리보기',
   children,
 }: TabScreenShellProps) {
   return (
@@ -29,7 +31,7 @@ export function TabScreenShell({
           <PaceBrand />
           <View style={styles.previewBadge}>
             <View style={styles.previewDot} />
-            <Text style={styles.previewLabel}>미리보기</Text>
+            <Text style={styles.previewLabel}>{badge}</Text>
           </View>
         </View>
         <View style={styles.heading}>

@@ -23,10 +23,11 @@ export function WeeklyGoalScreen() {
     setData: setGoalKm,
     errorMessage: loadErrorMessage,
     clearError,
+    isLoading,
   } = useFocusQuery(
     getWeeklyGoalKm,
     DEFAULT_WEEKLY_GOAL_KM,
-    '주간 목표를 불러오지 못했어요. 저장 공간을 확인해 주세요.',
+    '주간 목표를 불러오지 못했어요. 연결 상태를 확인해 주세요.',
   );
   const [isSaving, setIsSaving] = useState(false);
   const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
@@ -78,7 +79,7 @@ export function WeeklyGoalScreen() {
               accessibilityRole="button"
               accessibilityLabel="목표 5킬로미터 낮추기"
               accessibilityState={{ disabled: goalKm <= MIN_WEEKLY_GOAL_KM }}
-              disabled={goalKm <= MIN_WEEKLY_GOAL_KM}
+              disabled={isSaving || isLoading || goalKm <= MIN_WEEKLY_GOAL_KM}
               onPress={() => setGoalKm((value) => value - WEEKLY_GOAL_STEP_KM)}
               style={[styles.stepButton, goalKm <= MIN_WEEKLY_GOAL_KM && styles.disabled]}>
               <Text style={styles.stepText}>−</Text>
@@ -88,7 +89,7 @@ export function WeeklyGoalScreen() {
               accessibilityRole="button"
               accessibilityLabel="목표 5킬로미터 높이기"
               accessibilityState={{ disabled: goalKm >= MAX_WEEKLY_GOAL_KM }}
-              disabled={goalKm >= MAX_WEEKLY_GOAL_KM}
+              disabled={isSaving || isLoading || goalKm >= MAX_WEEKLY_GOAL_KM}
               onPress={() => setGoalKm((value) => value + WEEKLY_GOAL_STEP_KM)}
               style={[styles.stepButton, goalKm >= MAX_WEEKLY_GOAL_KM && styles.disabled]}>
               <Text style={styles.stepText}>+</Text>
@@ -99,14 +100,14 @@ export function WeeklyGoalScreen() {
         <View style={styles.tipCard}>
           <Text style={styles.tipTitle}>목표 설정 팁</Text>
           <Text style={styles.tipText}>
-            최근 달리던 거리보다 조금씩 늘려 보세요. 목표는 기기에 저장되며,
+            최근 달리던 거리보다 조금씩 늘려 보세요. 로그인하면 목표는 계정에 저장되며,
             언제든 다시 변경할 수 있어요.
           </Text>
         </View>
 
         <Pressable
           accessibilityRole="button"
-          disabled={isSaving}
+          disabled={isSaving || isLoading || Boolean(loadErrorMessage)}
           onPress={saveGoal}
           style={({ pressed }) => [
             styles.saveButton,

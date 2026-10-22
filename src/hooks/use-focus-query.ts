@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
+import { getSessionState, useSession } from '@/features/auth/session-store';
+import { ApiError } from '@/lib/api-transport';
 
 type FocusQuery<T> = {
   data: T;
@@ -19,27 +21,32 @@ export function useFocusQuery<T>(
   initialData: T,
   failureMessage: string,
 ): FocusQuery<T> {
-  const [data, setData] = useState<T>(initialData);
+  const { session } = useSession();
+  const userId = session?.user.id;
+  const [initial] = useState(() => initialData);
+  const [snapshot, setSnapshot] = useState({ userId, data: initialData });
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const run = useCallback(
     async (isActive: () => boolean) => {
+      const isCurrent = () => isActive() && getSessionState().session?.user.id === userId;
       setIsLoading(true);
+      setSnapshot({ userId, data: initial });
       try {
         const result = await load();
-        if (isActive()) {
-          setData(result);
+        if (isCurrent()) {
+          setSnapshot({ userId, data: result });
           setErrorMessage(null);
         }
       } catch (error) {
         console.error(failureMessage, error);
-        if (isActive()) setErrorMessage(failureMessage);
+        if (isCurrent()) setErrorMessage(error instanceof ApiError ? error.message : failureMessage);
       } finally {
-        if (isActive()) setIsLoading(false);
+        if (isCurrent()) setIsLoading(false);
       }
     },
-    [load, failureMessage],
+    [load, failureMessage, userId, initial],
   );
 
   useFocusEffect(
@@ -53,10 +60,17 @@ export function useFocusQuery<T>(
   );
 
   return {
-    data,
-    isLoading,
-    errorMessage,
-    setData,
+    data: snapshot.userId === userId ? snapshot.data : initial,
+    isLoading: snapshot.userId !== userId || isLoading,
+    errorMessage: snapshot.userId === userId ? errorMessage : null,
+    setData: useCallback((update: T | ((current: T) => T)) => {
+      setSnapshot((current) => ({
+        userId,
+        data: typeof update === 'function'
+          ? (update as (value: T) => T)(current.userId === userId ? current.data : initial)
+          : update,
+      }));
+    }, [userId, initial]),
     clearError: useCallback(() => setErrorMessage(null), []),
     reload: useCallback(() => run(() => true), [run]),
   };

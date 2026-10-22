@@ -2,7 +2,7 @@
   "expo": {
     "name": "PACE",
     "slug": "pace-front-app",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./public/pwa-512.png",
     "scheme": "pacefrontapp",
@@ -69,7 +69,14 @@
           "groupIdentifier": "group.com.hocompany.pace",
           "frequentUpdates": true
         }
-      ]
+      ],
+      [
+        "@react-native-google-signin/google-signin/app.plugin.js",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.569856299617-2ulippt30k87ubgkq1sotovovlfvsst7"
+        }
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "baseUrl": "/dev",

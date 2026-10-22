@@ -10,6 +10,7 @@ export type RunPoint = {
 
 /** A run in progress. Elapsed time = elapsedBeforeSegmentMs + (now - segmentStartedAt) while running. */
 export type ActiveRun = {
+  ownerId?: string | null;
   id: string;
   status: 'running' | 'paused';
   startedAt: number;
@@ -22,6 +23,7 @@ export type ActiveRun = {
 
 /** A finished run. Mirrors the `POST /runs` payload in docs/API_REQUIREMENTS.md. */
 export type CompletedRun = {
+  serverId?: string;
   id: string;
   startedAt: number;
   endedAt: number;

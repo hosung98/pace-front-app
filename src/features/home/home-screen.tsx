@@ -8,13 +8,10 @@ import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { getActiveRunSnapshot, subscribeToActiveRun } from '@/data/active-run-store';
-import { listCompletedRuns } from '@/data/completed-runs-repository';
-import { getWeeklyGoalKm } from '@/data/weekly-goal-repository';
+import { getHomeData } from '@/data/insights-repository';
+import { useSession } from '@/features/auth/session-store';
 import {
-  getLatestRun,
-  getTodayDistanceKm,
   getWeekStart,
-  getWeeklyInsights,
   WEEKDAY_LABELS,
   type WeeklyInsights,
 } from '@/features/running/run-insights';
@@ -22,11 +19,6 @@ import type { CompletedRun } from '@/features/running/types';
 import { DEFAULT_WEEKLY_GOAL_KM } from '@/features/running/weekly-goal';
 import { useFocusQuery } from '@/hooks/use-focus-query';
 import { formatDuration, formatKm, formatLongDate, formatPace } from '@/lib/format';
-
-const loadHomeData = async () => {
-  const [runs, weeklyGoalKm] = await Promise.all([listCompletedRuns(), getWeeklyGoalKm()]);
-  return { runs, weeklyGoalKm };
-};
 
 function SectionHeading({
   title,
@@ -215,18 +207,14 @@ function RecentRunCard({ recentRun }: { recentRun: CompletedRun | null }) {
 
 export function HomeScreen() {
   const router = useRouter();
+  const { session } = useSession();
   const { data, errorMessage, clearError } = useFocusQuery(
-    loadHomeData,
-    { runs: [] as CompletedRun[], weeklyGoalKm: DEFAULT_WEEKLY_GOAL_KM },
-    '러닝 정보를 불러오지 못했어요. 저장 공간을 확인해 주세요.',
+    getHomeData,
+    { weekly: { distanceKm: 0, runCount: 0, dailyDistancesKm: new Array<number>(7).fill(0) },
+      todayKm: 0, recent: null as CompletedRun | null, weekStart: getWeekStart(new Date()), goalKm: DEFAULT_WEEKLY_GOAL_KM },
+    '러닝 정보를 불러오지 못했어요. 연결 상태를 확인해 주세요.',
   );
-  const { runs: completedRuns, weeklyGoalKm } = data;
-
-  const now = new Date();
-  const weeklyInsights = getWeeklyInsights(completedRuns, now);
-  const todayDistanceKm = getTodayDistanceKm(completedRuns, now);
-  const recentRun = getLatestRun(completedRuns);
-  const weekStart = getWeekStart(now);
+  const { weekly: weeklyInsights, todayKm: todayDistanceKm, recent: recentRun, weekStart, goalKm: weeklyGoalKm } = data;
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -235,7 +223,7 @@ export function HomeScreen() {
           <PaceBrand />
           <View style={styles.sampleBadge}>
             <View style={styles.sampleDot} />
-            <Text style={styles.sampleLabel}>미리보기</Text>
+            <Text style={styles.sampleLabel}>{session ? '계정 연결' : '기기 모드'}</Text>
           </View>
         </View>
         <View style={styles.greeting}>
@@ -271,12 +259,13 @@ export function HomeScreen() {
           </View>
 
           <View style={styles.section}>
-            <SectionHeading title="최근 러닝" detail={recentRun ? '기기 저장 기록' : '첫 러닝을 시작해 보세요'} />
+            <SectionHeading title="최근 러닝" detail={recentRun ? '완료한 러닝' : '첫 러닝을 시작해 보세요'} />
             <RecentRunCard recentRun={recentRun} />
           </View>
 
           <Text style={styles.disclaimer}>
-            이번 주는 {weekStart.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })} 시작 기준이에요. 기록은 이 기기에 저장됩니다.
+            이번 주는 {weekStart.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })} 시작 기준이에요.
+            {session ? ' 계정 통계는 한국 시간 기준입니다.' : ' 로그인 전 기록은 기기에 보관됩니다.'}
           </Text>
         </View>
       </ScrollView>

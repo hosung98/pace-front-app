@@ -14,6 +14,7 @@ import {
   writeActiveRun,
 } from '@/data/active-run-store';
 import { saveCompletedRun } from '@/data/completed-runs-repository';
+import { getSessionState } from '@/features/auth/session-store';
 import { formatDuration, formatKm, formatPace } from '@/lib/format';
 
 import {
@@ -75,6 +76,7 @@ export function RunTrackingScreen() {
     try {
       if (!(await ensureReady())) return;
       const nextRun = createActiveRun();
+      nextRun.ownerId = getSessionState().session?.user.id ?? null;
       await writeActiveRun(nextRun);
       setNow(nextRun.startedAt);
       await startLocationTracking();
@@ -129,10 +131,11 @@ export function RunTrackingScreen() {
     setBusy(true);
     try {
       await stopLocationTracking();
-      await saveCompletedRun(toCompletedRun(getActiveRunSnapshot().run ?? run));
+      const completed = getActiveRunSnapshot().run ?? run;
+      const saved = await saveCompletedRun(toCompletedRun(completed), completed.ownerId ?? null);
       await clearActiveRun();
       setConfirmingFinish(false);
-      setMessage('러닝을 이 기기에 저장했어요. 서버 동기화는 아직 연결되지 않았어요.');
+      setMessage(saved.message);
     } catch (error) {
       console.error('Unable to finish and save GPS run.', error);
       setErrorMessage('러닝을 저장하지 못했어요. 기록을 유지한 채 다시 시도해 주세요.');
@@ -191,7 +194,7 @@ export function RunTrackingScreen() {
             {confirmingFinish ? (
               <View style={styles.confirmCard}>
                 <Text style={styles.confirmTitle}>러닝을 종료하고 저장할까요?</Text>
-                <Text style={styles.confirmDescription}>저장된 경로는 현재 이 기기에만 보관됩니다.</Text>
+                <Text style={styles.confirmDescription}>기기에 먼저 보관하고, 로그인한 계정이 있으면 GPS 경로와 함께 서버에 저장해요.</Text>
                 <View style={styles.confirmActions}>
                   <ActionButton label="계속 달리기" secondary disabled={busy} onPress={() => setConfirmingFinish(false)} />
                   <ActionButton label="종료 및 저장" disabled={busy} onPress={finishRun} />
@@ -223,7 +226,7 @@ export function RunTrackingScreen() {
           <Text accessibilityLiveRegion="polite" style={styles.message}>{snapshot.error}</Text>
         ) : null}
         <Text style={styles.privacyNote}>
-          GPS 경로는 러닝 종료 시 이 기기에 저장됩니다. 화면이 꺼진 동안에도 기록하려면
+          GPS 경로는 종료 시 기기에 저장되고 로그인 계정에 동기화됩니다. 화면이 꺼진 동안에도 기록하려면
           위치 권한을 허용해야 합니다. 앱을 강제 종료하면 운영체제에 따라 기록이 중단될 수 있어요.
         </Text>
       </ScrollView>

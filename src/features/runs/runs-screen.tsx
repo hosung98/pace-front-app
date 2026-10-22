@@ -16,11 +16,18 @@ import { getWeeklyInsights } from '@/features/running/run-insights';
 import type { CompletedRun } from '@/features/running/types';
 import { useFocusQuery } from '@/hooks/use-focus-query';
 import { formatDuration, formatKm, formatPace, formatShortDate } from '@/lib/format';
+import { useSession } from '@/features/auth/session-store';
 
 const UNDO_DURATION_MS = 4000;
 const SKELETON_DELAY_MS = 200;
 
 export function RunsScreen() {
+  const { session } = useSession();
+  return <AccountRuns key={session?.user.id ?? 'guest'} />;
+}
+
+function AccountRuns() {
+  const { session } = useSession();
   const router = useRouter();
   const {
     data: completedRuns,
@@ -89,7 +96,8 @@ export function RunsScreen() {
       eyebrow="RUN HISTORY"
       title="나의 러닝 기록"
       description="달려온 시간과 거리를 차곡차곡 모아봐요."
-      disclaimer="러닝 기록은 이 기기에 저장됩니다. 계정 동기화는 서버 연동 후 제공돼요."
+      badge={session ? '계정 연결' : '기기 모드'}
+      disclaimer={session ? '계정에 저장한 기록입니다. 연결 복구 후 화면을 다시 열면 대기 중인 기록을 동기화해요.' : '로그인 전에는 이 기기에 저장해요. 로그인하면 GPS 경로와 함께 계정에 연결합니다.'}
       overlay={deletedRun ? (
         <View style={styles.toast} accessibilityLiveRegion="polite">
           <Text style={styles.toastText}>러닝 기록을 삭제했어요</Text>

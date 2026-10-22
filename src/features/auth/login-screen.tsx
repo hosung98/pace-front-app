@@ -12,6 +12,13 @@ import { BackHeader } from '@/components/back-header';
 import { PaceMark } from '@/components/pace-brand';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
+import { PaceErrorDialog } from '@/components/pace-feedback';
+import { API_BASE_URL } from '@/constants/api';
+import { claimGuestRuns, syncCompletedRuns } from '@/data/completed-runs-repository';
+import { readActiveRun } from '@/data/active-run-store';
+import { errorMessage, requestJson } from '@/lib/api-transport';
+import { googleIdToken } from './google-login';
+import { acceptSession, useSession, type AuthTokens } from './session-store';
 
 const loginProviders = [
   {
@@ -44,8 +51,42 @@ const providerNames: Record<LoginProvider, string> = {
 
 export function LoginScreen() {
   const router = useRouter();
+  const { session } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] =
     useState<LoginProvider | null>(null);
+
+  const signIn = async (provider: LoginProvider) => {
+    setSelectedProvider(provider);
+    if (provider !== 'google') return;
+    setBusy(true);
+    try {
+      if (await readActiveRun()) throw new Error('러닝을 종료하고 저장한 뒤 로그인해 주세요.');
+      if (!session) {
+        const idToken = await googleIdToken();
+        if (!idToken) return;
+        const tokens = await requestJson<AuthTokens>(API_BASE_URL, '/auth/google', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken }),
+        });
+        await acceptSession(tokens);
+      }
+      try {
+        await claimGuestRuns();
+        await syncCompletedRuns();
+      } catch (error) {
+        console.warn('로그인 후 기기 기록 동기화 실패', error);
+        setFailure(`로그인은 완료했어요. 기기 기록은 보관 중이며 기록 화면에서 다시 동기화할 수 있어요. ${errorMessage(error, '')}`);
+        return;
+      }
+      router.replace('/main');
+    } catch (error) {
+      console.error('로그인 실패', error);
+      setFailure(errorMessage(error, 'Google 로그인에 실패했어요. 다시 시도해 주세요.'));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -63,7 +104,7 @@ export function LoginScreen() {
             <Text style={styles.eyebrow}>YOUR PACE, YOUR WAY</Text>
             <Text style={styles.title}>나만의 페이스로,{'\n'}함께 달려요.</Text>
             <Text style={styles.description}>
-              계정 연결은 준비 중이에요. 먼저 PACE 화면을 둘러보세요.
+              Google 계정으로 로그인하고 러닝 기록을 이어가세요.
             </Text>
           </View>
 
@@ -73,7 +114,9 @@ export function LoginScreen() {
                 key={provider.id}
                 accessibilityRole="button"
                 accessibilityLabel={provider.label}
-                onPress={() => setSelectedProvider(provider.id)}
+                disabled={busy}
+                accessibilityState={{ disabled: busy }}
+                onPress={() => { void signIn(provider.id); }}
                 style={({ pressed }) => [
                   styles.providerButton,
                   styles[provider.buttonStyle],
@@ -84,35 +127,41 @@ export function LoginScreen() {
                     styles.providerText,
                     styles[provider.textStyle],
                   ]}>
-                  {provider.label}
+                  {busy && provider.id === 'google' ? '로그인 중…' : provider.label}
                 </Text>
               </Pressable>
             ))}
             <Text
               accessibilityLiveRegion="polite"
               style={styles.statusMessage}>
-              {selectedProvider
+              {selectedProvider && selectedProvider !== 'google'
                 ? `${providerNames[selectedProvider]} 로그인은 아직 연결되지 않았어요.`
-                : 'Google, 카카오, Apple 계정으로 간편하게'}
+                : '현재 Google 로그인은 새로 빌드한 iOS 앱에서 지원해요.'}
             </Text>
           </View>
 
           <Pressable
             accessibilityRole="button"
+            disabled={busy}
             onPress={() => router.push('/main')}
             style={({ pressed }) => [
               styles.previewButton,
               pressed && styles.pressed,
             ]}>
-            <Text style={styles.previewButtonText}>메인 화면 미리보기</Text>
+            <Text style={styles.previewButtonText}>{session ? '메인 화면으로' : '로그인 없이 기기에서 사용하기'}</Text>
             <Text style={styles.previewButtonArrow}>→</Text>
           </Pressable>
 
           <Text style={styles.legalNotice}>
-            이용약관과 개인정보 처리방침은 정식 로그인 연결 시 안내할 예정이에요.
+            로그인하면 이 기기의 미연결 러닝 기록과 GPS 경로를 해당 계정의 서버에 전송해요.
+            개발 API는 Tailscale 연결이 필요해요. 정식 출시 전 이용약관·개인정보 처리방침이 제공될 예정이에요.
           </Text>
         </View>
       </ScrollView>
+      <PaceErrorDialog message={failure} onClose={() => {
+        setFailure(null);
+        if (session) router.replace('/main');
+      }} />
     </SafeAreaView>
   );
 }

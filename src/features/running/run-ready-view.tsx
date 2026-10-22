@@ -15,11 +15,12 @@ import Animated, {
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 
-import { listCompletedRuns } from '@/data/completed-runs-repository';
-import { getWeeklyGoalKm } from '@/data/weekly-goal-repository';
+import { getHomeData } from '@/data/insights-repository';
+import { PaceErrorDialog } from '@/components/pace-feedback';
+import { useSession } from '@/features/auth/session-store';
+import { errorMessage } from '@/lib/api-transport';
 import { formatPace } from '@/lib/format';
 
-import { getLatestRun, getWeeklyInsights } from './run-insights';
 import type { CompletedRun } from './types';
 
 const BUTTON_SIZE = 168;
@@ -39,7 +40,7 @@ export function RunReadyView({
   busy: boolean;
   onStart: () => void;
 }) {
-  const summary = useRunSummary();
+  const { summary, error, clearError } = useRunSummary();
   const reduceMotion = useReducedMotion();
 
   const handleStart = () => {
@@ -119,8 +120,9 @@ export function RunReadyView({
       <View style={styles.features}>
         <Feature symbol="⌖" title="정밀 GPS" caption="거리·페이스 실시간" />
         <Feature symbol="◐" title="잠금 중 기록" caption="화면을 꺼도 계속" />
-        <Feature symbol="◇" title="기기 저장" caption="경로는 내 폰에만" />
+        <Feature symbol="◇" title="기기 우선 저장" caption="로그인 시 계정 동기화" />
       </View>
+      <PaceErrorDialog message={error} onClose={clearError} />
     </View>
   );
 }
@@ -161,31 +163,34 @@ function Feature({ symbol, title, caption }: { symbol: string; title: string; ca
   );
 }
 
-function useRunSummary(): Summary | null {
-  const [summary, setSummary] = useState<Summary | null>(null);
+function useRunSummary() {
+  const [result, setResult] = useState<{ userId: string | undefined; summary: Summary } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { session } = useSession();
+  const userId = session?.user.id;
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([listCompletedRuns(), getWeeklyGoalKm()])
-      .then(([runs, goalKm]) => {
+    getHomeData()
+      .then((data) => {
         if (cancelled) return;
-        const weekly = getWeeklyInsights(runs);
-        setSummary({
-          weeklyKm: weekly.distanceKm,
-          weeklyRuns: weekly.runCount,
-          goalKm,
-          lastRun: getLatestRun(runs),
-        });
+        setResult({ userId, summary: {
+          weeklyKm: data.weekly.distanceKm,
+          weeklyRuns: data.weekly.runCount,
+          goalKm: data.goalKm,
+          lastRun: data.recent,
+        } });
       })
       .catch((error: unknown) => {
         console.error('Unable to load run summary.', error);
+        if (!cancelled) setError(errorMessage(error, '러닝 요약을 불러오지 못했어요.'));
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [userId]);
 
-  return summary;
+  return { summary: result?.userId === userId ? result?.summary ?? null : null, error, clearError: () => setError(null) };
 }
 
 function formatRelativeDay(timestamp: number): string {

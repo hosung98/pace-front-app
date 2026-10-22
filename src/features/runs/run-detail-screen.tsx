@@ -18,16 +18,25 @@ import {
 
 import { toRouteCoordinates } from './route-geometry';
 import { RunRouteMap } from './run-route-map';
+import { errorMessage } from '@/lib/api-transport';
+import { useSession } from '@/features/auth/session-store';
 
 const MAP_HEIGHT = 240;
 
 type LoadState =
   | { status: 'loading' }
-  | { status: 'loaded'; runId: string; run: CompletedRun | null };
+  | { status: 'loaded'; runId: string; run: CompletedRun | null; error?: string };
 
 export function RunDetailScreen() {
+  const { session } = useSession();
+  return <AccountRunDetail key={session?.user.id ?? 'guest'} />;
+}
+
+function AccountRunDetail() {
   const { runId } = useLocalSearchParams<{ runId?: string }>();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
+  const { session } = useSession();
+  const userId = session?.user.id;
 
   useEffect(() => {
     if (!runId) return;
@@ -38,12 +47,12 @@ export function RunDetailScreen() {
       })
       .catch((error: unknown) => {
         console.error('Unable to load the run detail.', error);
-        if (!cancelled) setState({ status: 'loaded', runId, run: null });
+        if (!cancelled) setState({ status: 'loaded', runId, run: null, error: errorMessage(error, '기록을 불러오지 못했어요.') });
       });
     return () => {
       cancelled = true;
     };
-  }, [runId]);
+  }, [runId, userId]);
 
   const isLoading = Boolean(runId) && (state.status === 'loading' || state.runId !== runId);
   const run = !isLoading && state.status === 'loaded' ? state.run : null;
@@ -59,7 +68,7 @@ export function RunDetailScreen() {
               {isLoading ? '기록을 불러오는 중' : '기록을 찾을 수 없어요'}
             </Text>
             {!isLoading ? (
-              <Text style={styles.mapCaption}>삭제되었거나 이 기기에 없는 기록이에요.</Text>
+              <Text style={styles.mapCaption}>{state.status === 'loaded' && state.error ? state.error : '삭제되었거나 현재 계정·기기에 없는 기록이에요.'}</Text>
             ) : null}
           </View>
         </View>
@@ -108,7 +117,7 @@ export function RunDetailScreen() {
           />
         </View>
         <Text style={styles.note}>
-          거리와 페이스는 이 기기에 저장된 GPS 기록을 기준으로 표시합니다.
+          {session ? '계정에 저장된 러닝과 GPS 경로입니다.' : '기기에 저장된 GPS 기록입니다.'}
         </Text>
       </ScrollView>
     </SafeAreaView>

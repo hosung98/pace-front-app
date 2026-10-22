@@ -1,18 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { TabScreenShell, tabScreenStyles } from '@/features/navigation/tab-screen-shell';
-import { listCompletedRuns } from '@/data/completed-runs-repository';
-import {
-  getAllTimeInsights,
-  getMonthlyInsights,
-  getWeeklyInsights,
-  WEEKDAY_LABELS,
-} from '@/features/running/run-insights';
-import type { CompletedRun } from '@/features/running/types';
+import { getStatsData } from '@/data/insights-repository';
+import { useSession } from '@/features/auth/session-store';
 import { useFocusQuery } from '@/hooks/use-focus-query';
 import { formatPace } from '@/lib/format';
 
@@ -20,34 +14,23 @@ type Period = '주간' | '월간';
 
 export function StatsScreen() {
   const [period, setPeriod] = useState<Period>('주간');
-  const { data: completedRuns, errorMessage, clearError } = useFocusQuery<CompletedRun[]>(
-    listCompletedRuns,
-    [],
-    '러닝 통계를 불러오지 못했어요. 저장 공간을 확인해 주세요.',
+  const { session } = useSession();
+  const load = useCallback(() => getStatsData(period === '주간' ? 'week' : 'month'), [period]);
+  const { data, errorMessage, clearError } = useFocusQuery(
+    load,
+    { distanceKm: 0, values: [] as number[], labels: [] as string[], allTime: { distanceKm: 0, runCount: 0, averagePaceSecondsPerKm: null as number | null, longestRunKm: 0 } },
+    '러닝 통계를 불러오지 못했어요. 연결 상태를 확인해 주세요.',
   );
-
-  const insights = useMemo(
-    () => period === '주간'
-      ? getWeeklyInsights(completedRuns)
-      : getMonthlyInsights(completedRuns),
-    [completedRuns, period],
-  );
-  const allTime = useMemo(() => getAllTimeInsights(completedRuns), [completedRuns]);
-  const values = period === '주간'
-    ? ('dailyDistancesKm' in insights ? insights.dailyDistancesKm : [])
-    : ('weeklyDistancesKm' in insights ? insights.weeklyDistancesKm : []);
-  const labels = period === '주간'
-    ? [...WEEKDAY_LABELS]
-    : values.map((_, index) => `${index + 1}주`);
+  const { allTime, values, labels, distanceKm } = data;
   const maxValue = Math.max(...values, 1);
-  const distanceKm = insights.distanceKm;
 
   return (
     <TabScreenShell
       eyebrow="YOUR PROGRESS"
       title="꾸준함이 만든 변화"
-      description="기기에 저장된 러닝 기록으로 나의 습관을 확인해요."
-      disclaimer="통계는 이 기기에 저장된 완료 러닝 기록을 기준으로 계산합니다.">
+      description="완료한 러닝 기록으로 나의 습관을 확인해요."
+      badge={session ? '계정 연결' : '기기 모드'}
+      disclaimer={session ? '서버에 저장된 기록을 한국 시간 기준으로 집계합니다.' : '로그인 전에는 기기 기록을 기준으로 계산합니다.'}>
       <View style={styles.segment}>
         {(['주간', '월간'] as const).map((item) => (
           <Pressable
@@ -77,7 +60,7 @@ export function StatsScreen() {
             </View>
           ))}
         </View>
-        {completedRuns.length === 0 ? (
+        {allTime.runCount === 0 ? (
           <Text style={styles.emptyHint}>
             첫 러닝을 완료하면 실제 기록이 차트와 요약에 표시됩니다.
           </Text>
@@ -85,7 +68,7 @@ export function StatsScreen() {
       </View>
       <Text style={styles.sectionTitle}>전체 러닝 요약</Text>
       <View style={styles.statsGrid}>
-        <StatCard label="총 러닝 거리" value={allTime.distanceKm.toFixed(1)} unit="km" detail="기기에 저장된 기록" />
+        <StatCard label="총 러닝 거리" value={allTime.distanceKm.toFixed(1)} unit="km" detail="완료한 러닝 기록" />
         <StatCard label="총 러닝 횟수" value={String(allTime.runCount)} unit="회" detail="완료한 GPS 러닝" />
         <StatCard label="평균 페이스" value={formatPace(allTime.averagePaceSecondsPerKm)} unit="/km" detail="전체 거리 가중 평균" />
         <StatCard label="최장 거리" value={allTime.longestRunKm.toFixed(2)} unit="km" detail="저장된 기록 중 최장" />

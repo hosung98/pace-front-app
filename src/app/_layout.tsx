@@ -3,8 +3,11 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
 
 import { PaceColors } from '@/constants/pace';
+import { initializeSession, useSession } from '@/features/auth/session-store';
+import { PaceErrorDialog } from '@/components/pace-feedback';
 
 import '@/features/running/location-tracking';
 
@@ -18,6 +21,9 @@ const theme = {
 };
 
 export default function RootLayout() {
+  const { ready, error } = useSession();
+  const [dismissedError, setDismissedError] = useState<string | null>(null);
+  useEffect(() => { void initializeSession(); }, []);
   const [fontsLoaded, fontError] = useFonts({
     'Pretendard-Regular': require('@/assets/fonts/Pretendard-Regular.otf'),
     'Pretendard-SemiBold': require('@/assets/fonts/Pretendard-SemiBold.otf'),
@@ -25,7 +31,7 @@ export default function RootLayout() {
   });
 
   if (fontError) throw fontError;
-  if (!fontsLoaded) return null;
+  if (!fontsLoaded || !ready) return null;
 
   return (
     <ThemeProvider value={theme}>
@@ -38,6 +44,7 @@ export default function RootLayout() {
         }}>
         <StatusBar style="light" />
         <Stack screenOptions={{ headerShown: false, contentStyle: styles.root }} />
+        <PaceErrorDialog message={dismissedError === error ? null : error} onClose={() => setDismissedError(error)} />
       </View>
     </ThemeProvider>
   );
