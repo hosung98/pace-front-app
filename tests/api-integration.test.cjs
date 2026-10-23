@@ -88,6 +88,17 @@ async function harness() {
   return h;
 }
 
+test('네트워크 실패 문구는 환경 정보를 노출하지 않고 서버 오류 메시지는 유지한다', async () => {
+  const h = await harness();
+  const { requestJson } = h.load('lib/api-transport');
+  h.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  await assert.rejects(requestJson('https://example.com', '/test'), (error) =>
+    error.message === '인터넷 연결을 확인해 주세요.' && error.code === 'NETWORK_ERROR' && error.status === 0);
+  h.fetch = async () => json({ code: 'FORBIDDEN', message: '권한이 없어요.' }, 403);
+  await assert.rejects(requestJson('https://example.com', '/test'), (error) =>
+    error.message === '권한이 없어요.' && error.status === 403 && error.code === 'FORBIDDEN');
+});
+
 test('동시 요청은 만료 토큰을 한 번만 회전하고 새 토큰을 공유한다', async () => {
   const h = await harness();
   await h.session.acceptSession(tokens('alice', 'old', 1));

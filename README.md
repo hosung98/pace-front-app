@@ -7,14 +7,14 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 PACE is a running journal with a dark, mobile-first interface. This first slice
 contains a branded launch splash, three Korean onboarding pages, GPS running,
 and account-connected home, history, statistics, profile, and settings screens.
-Google login is connected on iOS. Crew and race rooms use authenticated backend
+Google login is connected on iOS and web. Crew and race rooms use authenticated backend
 APIs rather than sample data; an empty account can create a crew or race room.
 
 - Next, centered page indicators, and horizontal swipes across the illustration
   and text area navigate the onboarding. Swipe right to go back; there is no back
   button. Skip goes to page three.
-- 온보딩 다음 화면에서 iOS Google 로그인 또는 기기 모드를 선택합니다.
-  카카오·Apple 로그인과 웹·Android Google 로그인은 아직 연결하지 않았습니다.
+- 온보딩 다음 화면에서 iOS·웹 Google 로그인 또는 기기 모드를 선택합니다.
+  카카오·Apple 로그인과 Android Google 로그인은 아직 연결하지 않았습니다.
 - The dashboard at `/main` shows device or account metrics. Starting a run opens native
   GPS tracking with distance, elapsed time, speed, pause/resume, and on-device
   save. Background location requires a development/standalone build and OS
@@ -102,7 +102,42 @@ Validate changes with `npm run lint`, `npx tsc --noEmit`, and
 ### 저장·동기화 동작
 
 - iOS 토큰은 SecureStore에 저장하며, 액세스 토큰 만료 시 refresh 요청을 한 번만 공유합니다.
-  웹 저장소 구현은 메모리 전용이며 현재 웹 Google 로그인 UI는 지원하지 않습니다.
+  웹은 Google Identity Services 공식 버튼의 ID 토큰을 같은 `/auth/google` API로 전송합니다.
+  웹 세션은 현재 탭의 메모리에만 저장하므로 페이지 새로고침·종료 후에는 다시 로그인해야 합니다.
+
+### 개발·운영 환경 표시
+
+- `EXPO_PUBLIC_APP_ENV=development`이면 공통 PACE 로고 옆에 `DEV` 배지를 표시합니다.
+  기본값도 `development`라서 현재 개발 API를 쓰는 TestFlight 앱에도 표시합니다.
+- 운영에서는 `EXPO_PUBLIC_APP_ENV=production`과 실제 운영 `EXPO_PUBLIC_API_BASE_URL`을
+  함께 지정합니다. 운영 환경에는 배지가 렌더링되지 않습니다.
+- 잘못된 환경 값이나 운영 설정에서 기본 개발 API·`/dev` 경로·localhost를 사용하는 경우
+  설정 오류로 중단합니다. 개발 서버를 운영으로 잘못 표시하지 않도록 하기 위함입니다.
+- `__DEV__`, TestFlight 여부, EAS 채널·환경 이름으로 API 환경을 판별하지 않습니다.
+  EAS `production` 환경을 쓰더라도 개발 API라면 위 값은 `development`로 유지하세요.
+- 값은 번들 생성 시 포함됩니다. 로컬에서는 `.env.local`에 설정하고 Expo를 다시 시작합니다.
+  배포 시에는 해당 EAS 환경에도 동일하게 설정한 뒤 새 빌드 또는 EAS Update를 발행해야 합니다.
+- 연결 실패 안내는 환경과 관계없이 “인터넷 연결을 확인해 주세요.”로 표시합니다.
+
+### 로컬 웹 Google 로그인
+
+```bash
+npx expo start --web --port 8088
+```
+
+- `http://localhost:8088/login`에서 로그인합니다. Google Cloud의 **웹 클라이언트**에
+  승인된 JavaScript 원본 `http://localhost:8088`을 등록해야 합니다.
+  `http://127.0.0.1:8088`은 다른 원본이므로 별도 등록 없이 바꾸어 사용하지 마세요.
+- 웹 클라이언트 ID는 `GOOGLE_WEB_CLIENT_ID`를 사용합니다. 클라이언트 시크릿은 필요하지 않습니다.
+- 팝업 방식이므로 Google 계정 선택 창을 허용하세요. OAuth 앱이 테스트 상태라면
+  Google Cloud에 해당 계정을 테스트 사용자로 등록해야 합니다.
+- 브라우저가 Google 스크립트를 차단하거나 불러오지 못하면 오류와 재시도를 표시합니다.
+- API에 접근하려면 이 컴퓨터에서도 Tailscale이 필요합니다. 백엔드 CORS 허용 원본에
+  `http://localhost:8088`이 포함되어 있어야 합니다. Google 원본 등록과 API CORS는 별개입니다.
+- 배포된 웹에서도 사용하려면 실제 HTTPS 웹 원본을 Google Cloud와 서버 CORS에 각각 등록합니다.
+
+### 계정 기록 동작
+
 - 로그인 전 러닝은 기존 기기 저장소를 그대로 사용합니다. 로그인 안내에 따라
   미연결 완료 기록과 GPS 경로를 첫 연결 계정으로 이전하고 서버에 전송합니다.
 - 로그인한 상태의 완료 기록은 계정별 전송 대기열에 먼저 저장합니다.

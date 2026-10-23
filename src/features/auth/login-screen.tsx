@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,11 +14,12 @@ import { PaceMark } from '@/components/pace-brand';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { PaceErrorDialog } from '@/components/pace-feedback';
-import { API_BASE_URL } from '@/constants/api';
+import { API_BASE_URL, APP_ENV } from '@/constants/api';
 import { claimGuestRuns, syncCompletedRuns } from '@/data/completed-runs-repository';
 import { readActiveRun } from '@/data/active-run-store';
 import { errorMessage, requestJson } from '@/lib/api-transport';
 import { googleIdToken } from './google-login';
+import { GoogleWebButton } from './google-web-button';
 import { acceptSession, useSession, type AuthTokens } from './session-store';
 
 export function LoginScreen() {
@@ -25,12 +27,15 @@ export function LoginScreen() {
   const { session } = useSession();
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const signIn = async () => {
+  const signingIn = useRef(false);
+  const signIn = async (webIdToken?: string) => {
+    if (signingIn.current) return;
+    signingIn.current = true;
     setBusy(true);
     try {
       if (await readActiveRun()) throw new Error('러닝을 종료하고 저장한 뒤 로그인해 주세요.');
       if (!session) {
-        const idToken = await googleIdToken();
+        const idToken = webIdToken ?? await googleIdToken();
         if (!idToken) return;
         const tokens = await requestJson<AuthTokens>(API_BASE_URL, '/auth/google', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken }),
@@ -50,6 +55,7 @@ export function LoginScreen() {
       console.error('로그인 실패', error);
       setFailure(errorMessage(error, 'Google 로그인에 실패했어요. 다시 시도해 주세요.'));
     } finally {
+      signingIn.current = false;
       setBusy(false);
     }
   };
@@ -75,6 +81,9 @@ export function LoginScreen() {
           </View>
 
           <View style={styles.loginOptions}>
+            {Platform.OS === 'web' && !session ? (
+              <GoogleWebButton disabled={busy} onCredential={(idToken) => { void signIn(idToken); }} />
+            ) : (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Google로 계속하기"
@@ -94,10 +103,11 @@ export function LoginScreen() {
                   {busy ? '로그인 중…' : 'Google로 계속하기'}
                 </Text>
               </Pressable>
+            )}
             <Text
               accessibilityLiveRegion="polite"
               style={styles.statusMessage}>
-              현재 Google 로그인은 iOS 앱에서 지원해요.{'\n'}카카오·Apple 로그인은 준비 중이에요.
+              Google 로그인은 iOS 앱과 웹에서 지원해요.{'\n'}Android·카카오·Apple 로그인은 준비 중이에요.
             </Text>
           </View>
 
@@ -114,8 +124,9 @@ export function LoginScreen() {
           </Pressable>
 
           <Text style={styles.legalNotice}>
-            로그인하면 이 기기의 미연결 러닝 기록과 GPS 경로를 해당 계정의 서버에 전송해요.
-            개발 API는 Tailscale 연결이 필요해요. 정식 출시 전 이용약관·개인정보 처리방침이 제공될 예정이에요.
+            로그인하면 이 기기의 미연결 러닝 기록과 GPS 경로를 해당 계정의 서버에 전송해요.{' '}
+            {APP_ENV === 'development' ? '개발 환경에서는 테스트용 서버를 사용해요. ' : ''}
+            정식 출시 전 이용약관·개인정보 처리방침이 제공될 예정이에요.
           </Text>
         </View>
       </ScrollView>

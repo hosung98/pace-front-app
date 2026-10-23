@@ -5,7 +5,7 @@ import { GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID } from '@/constants/api';
 
 export async function googleIdToken(): Promise<string | null> {
   if (Platform.OS !== 'ios') {
-    throw new Error('현재 Google 로그인은 iOS 앱에서 지원해요. 웹·Android 로그인은 준비 중이에요.');
+    throw new Error('네이티브 Google 로그인은 iOS 앱에서 지원해요. 웹에서는 웹 로그인 버튼을 사용해 주세요.');
   }
   if (isRunningInExpoGo()) throw new Error('Google 로그인은 새로 빌드한 PACE 앱에서 사용할 수 있어요.');
   const { GoogleSignin, isSuccessResponse, isErrorWithCode, statusCodes } =

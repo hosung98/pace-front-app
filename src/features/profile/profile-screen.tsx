@@ -25,7 +25,7 @@ async function loadProfile() {
 
 const menuItems = [
   { label: '앱 설정', detail: '알림, 거리 단위, 개인정보', route: '/settings' },
-  { label: '계정 로그인', detail: 'Google 로그인 · iOS 지원', route: '/login' },
+  { label: '계정 로그인', detail: 'Google 로그인 · iOS·웹 지원', route: '/login' },
 ] as const;
 
 export function ProfileScreen() {

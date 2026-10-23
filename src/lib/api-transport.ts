@@ -43,7 +43,7 @@ export async function requestJson<T>(
     return body as T;
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    throw new ApiError('서버에 연결하지 못했어요. 인터넷과 Tailscale 연결을 확인해 주세요.', 0, 'NETWORK_ERROR');
+    throw new ApiError('인터넷 연결을 확인해 주세요.', 0, 'NETWORK_ERROR');
   } finally {
     clearTimeout(timer);
   }
