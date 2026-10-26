@@ -250,7 +250,7 @@ function renderHarness(file, imports) {
   const module = { exports: {} };
   vm.runInNewContext(ts.transpileModule(source(file).text, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
-  }).outputText, { module, exports: module.exports, setInterval: () => 0, clearInterval() {},
+  }).outputText, { module, exports: module.exports, setInterval: () => 0, clearInterval() {}, setTimeout, clearTimeout,
     requestAnimationFrame: (callback) => { callback(); return 0; }, cancelAnimationFrame() {},
     console: { ...console, error() {} }, require: (name) => {
     if (!(name in mocks)) throw new Error(`Unexpected import ${name}`);
@@ -259,15 +259,154 @@ function renderHarness(file, imports) {
   return { unmount: () => {
     cleanups.forEach((cleanup) => cleanup?.());
     cleanups.clear();
-  }, render: (name, props) => {
+  }, render: (name, ...args) => {
     cursor = 0;
-    const tree = module.exports[name](props);
+    const tree = (typeof name === 'function' ? name : module.exports[name])(...args);
     const pending = effects;
     effects = [];
     pending.forEach((fn) => fn());
     return tree;
   } };
 }
+
+test('포커스 재조회는 이전 데이터를 유지하고 실패·계정 변경·조회 변경을 구분한다', async () => {
+  let session = { user: { id: 'a' } };
+  let focus;
+  let finish;
+  let reject;
+  const load = () => new Promise((resolve, fail) => { finish = resolve; reject = fail; });
+  class ApiError extends Error {}
+  const h = renderHarness('hooks/use-focus-query.ts', {
+    'expo-router': { useFocusEffect: fn => { focus = fn; } },
+    '@/features/auth/session-store': { useSession: () => ({ session }), getSessionState: () => ({ session }) },
+    '@/lib/api-transport': { ApiError },
+  });
+  const render = (loader = load) => h.render('useFocusQuery', loader, 'empty', '조회 실패');
+  assert.equal(render().isLoading, true);
+  let blur = focus();
+  finish('saved');
+  await new Promise(setImmediate);
+  assert.equal(render().data, 'saved');
+  blur();
+  blur = focus();
+  assert.equal(render().isLoading, false);
+  assert.equal(render().data, 'saved');
+  finish('updated');
+  await new Promise(setImmediate);
+  assert.equal(render().data, 'updated');
+  const retry = render().reload();
+  reject(new ApiError('서버 오류'));
+  await retry;
+  assert.equal(render().data, 'updated');
+  assert.equal(render().errorMessage, '서버 오류');
+  session = { user: { id: 'b' } };
+  assert.equal(render().data, 'empty');
+  assert.equal(render().isLoading, true);
+  blur();
+  blur = focus();
+  finish('b-only');
+  await new Promise(setImmediate);
+  assert.equal(render().data, 'b-only');
+  const otherLoad = async () => 'new-query';
+  assert.equal(render(otherLoad).data, 'empty');
+  blur();
+  focus();
+  await new Promise(setImmediate);
+  assert.equal(render(otherLoad).data, 'new-query');
+});
+
+test('화면을 떠난 조회는 늦게 응답해도 이전 결과를 덮어쓰지 않는다', async () => {
+  let focus;
+  const pending = [];
+  const load = () => new Promise(resolve => pending.push(resolve));
+  const h = renderHarness('hooks/use-focus-query.ts', {
+    'expo-router': { useFocusEffect: fn => { focus = fn; } },
+    '@/features/auth/session-store': { useSession: () => ({ session: null }), getSessionState: () => ({ session: null }) },
+    '@/lib/api-transport': { ApiError: Error },
+  });
+  const render = () => h.render('useFocusQuery', load, null, '조회 실패');
+  render();
+  const blur = focus();
+  blur();
+  focus();
+  pending[1]('latest');
+  await new Promise(setImmediate);
+  pending[0]('stale');
+  await new Promise(setImmediate);
+  assert.equal(render().data, 'latest');
+  assert.equal(render().isLoading, false);
+});
+
+test('기록 상세는 고정 섹션 선택과 독립 스크롤로 나누고 건강 버튼은 펼침 영역에 둔다', () => {
+  const file = source('features/runs/run-detail-screen.tsx');
+  const section = elements(file, 'SegmentedControl')[0];
+  assert.equal(ancestors(section).includes('ScrollView'), false);
+  assert.equal(elements(file, 'ScrollView').length, 3);
+  const health = elements(file, 'PaceButton').find(node =>
+    node.attributes.getText().includes('Apple 건강에 저장'));
+  assert.ok(ancestors(health).includes('PaceDisclosure'));
+  assert.match(file.text, /visited\.reflection/);
+  assert.match(file.text, /ready=\{section === 'share'\}/);
+  assert.doesNotMatch(source('features/profile/profile-screen.tsx').text, /getWeeklyGoalKm|\/weekly-goal|styles\.goalCard/);
+});
+
+test('처음 조회가 짧으면 로고를 표시하지 않고 오래 걸리면 점멸 없이 표시한다', async () => {
+  const h = renderHarness('components/pace-feedback.tsx', {
+    'react-native': { View: 'View', Modal: 'Modal', Pressable: 'Pressable',
+      useWindowDimensions: () => ({ height: 568 }), StyleSheet: { create: s => s } },
+    '@/components/pace-brand': { PaceBrand: 'PaceBrand', PaceMark: 'PaceMark' },
+    '@/components/pace-text': { PaceText: 'Text' }, '@/constants/pace': { PaceColors: {} },
+  });
+  const opacity = () => flatten(h.render('PaceLoadingState', {}))
+    .find(({ node }) => typeof node.props.style?.opacity === 'number').node.props.style.opacity;
+  assert.equal(opacity(), 0);
+  await new Promise(resolve => setTimeout(resolve, 180));
+  assert.equal(opacity(), 1);
+  h.unmount();
+});
+
+test('기록 상세의 회고와 공유는 처음 선택할 때 열고 이후 탭 전환에서는 유지한다', async () => {
+  const run = { id: 'r', startedAt: 0, durationSeconds: 300, distanceMeters: 1000, routePoints: [] };
+  const h = renderHarness('features/runs/run-detail-screen.tsx', {
+    'react-native': { View: 'View', ScrollView: 'ScrollView', StyleSheet: { create: s => s } },
+    'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
+    'expo-router': { useLocalSearchParams: () => ({ runId: 'r' }), useRouter: () => ({ push() {} }) },
+    '@/components/back-header': { BackHeader: 'BackHeader' },
+    '@/components/pace-text': { PaceText: 'Text' },
+    '@/components/pace-button': { PaceButton: 'PaceButton' },
+    '@/components/segmented-control': { SegmentedControl: 'SegmentedControl' },
+    '@/components/pace-disclosure': { PaceDisclosure: 'PaceDisclosure' },
+    '@/constants/pace': { PaceColors: {} },
+    '@/data/completed-runs-repository': { getCompletedRun: async () => run },
+    '@/lib/format': { formatDateTime: String, formatDuration: String, formatKm: String, formatPace: String, formatSpeedKmh: String },
+    '@/lib/api-transport': { errorMessage: e => e.message },
+    '@/features/auth/session-store': { useSession: () => ({ session: null }) },
+    '@/features/health/health-service': { supportsHealth: true },
+    './route-geometry': { toRouteCoordinates: () => [] },
+    './run-route-map': { RunRouteMap: 'RunRouteMap' },
+    './run-reflection': { RunReflection: 'RunReflection' },
+    './run-share-card': { RunShareCard: 'RunShareCard' },
+  });
+  const accountScreen = h.render('RunDetailScreen').type;
+  const render = () => flatten(h.render(accountScreen));
+  render();
+  await new Promise(setImmediate);
+  let nodes = render();
+  assert.equal(nodes.some(({ node }) => node.type === 'RunReflection'), false);
+  assert.equal(nodes.some(({ node }) => node.type === 'RunShareCard'), false);
+  nodes.find(({ node }) => node.type === 'SegmentedControl').node.props.onChange('reflection');
+  nodes = render();
+  assert.ok(nodes.some(({ node }) => node.type === 'RunReflection'));
+  nodes.find(({ node }) => node.type === 'SegmentedControl').node.props.onChange('share');
+  nodes = render();
+  assert.ok(nodes.some(({ node }) => node.type === 'RunReflection'));
+  assert.equal(nodes.find(({ node }) => node.type === 'RunShareCard').node.props.ready, true);
+  nodes.find(({ node }) => node.type === 'SegmentedControl').node.props.onChange('summary');
+  nodes = render();
+  assert.ok(nodes.some(({ node }) => node.type === 'RunReflection'));
+  assert.equal(nodes.find(({ node }) => node.type === 'RunShareCard').node.props.ready, false);
+  h.unmount();
+});
 
 test('러닝 목표를 진행 기록에 보관하고 저장 실패는 기록을 유지하며 성공 후에만 완료 화면으로 간다', async () => {
   let snapshot = { run: null, loaded: true, error: null };

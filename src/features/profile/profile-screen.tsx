@@ -7,8 +7,6 @@ import { PaceErrorDialog, PaceLoadingState } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { TabScreenShell, tabScreenStyles } from '@/features/navigation/tab-screen-shell';
-import { getWeeklyGoalKm } from '@/data/weekly-goal-repository';
-import { DEFAULT_WEEKLY_GOAL_KM } from '@/features/running/weekly-goal';
 import { useFocusQuery } from '@/hooks/use-focus-query';
 import { getMe, logout, type Me } from '@/data/account-repository';
 import { PaceConfirmDialog } from '@/components/pace-confirm-dialog';
@@ -18,10 +16,7 @@ import { errorMessage as describeError } from '@/lib/api-transport';
 import { ProgressSummary } from '@/features/running/progress-summary';
 
 async function loadProfile() {
-  const [weeklyGoalKm, me] = await Promise.all([
-    getWeeklyGoalKm(), getSessionState().session ? getMe() : Promise.resolve(null),
-  ]);
-  return { weeklyGoalKm, me };
+  return { me: getSessionState().session ? await getMe() : null };
 }
 
 const menuItems = [
@@ -40,10 +35,10 @@ function AccountProfile() {
   const { session } = useSession();
   const { data, errorMessage, reload, isLoading } = useFocusQuery(
     loadProfile,
-    { weeklyGoalKm: DEFAULT_WEEKLY_GOAL_KM, me: null as Me | null },
+    { me: null as Me | null },
     '프로필을 불러오지 못했어요. 연결 상태를 확인해 주세요.',
   );
-  const { weeklyGoalKm, me } = data;
+  const { me } = data;
   const [busy, setBusy] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -64,9 +59,9 @@ function AccountProfile() {
     <TabScreenShell
       eyebrow="MY PACE"
       title="나의 프로필"
-      description="나만의 러닝 목표와 앱 환경을 관리해요."
+      description="나의 성취와 프로필, 앱 환경을 관리해요."
       badge={session ? '계정 연결' : '기기 모드'}
-      disclaimer={session ? '프로필과 주간 목표는 계정에 저장됩니다.' : '로그인 전에는 주간 목표와 기록을 이 기기에 저장합니다.'}>
+      disclaimer={session ? '프로필과 러닝 성취는 계정에 저장됩니다.' : '로그인 전에는 기록을 이 기기에 저장합니다.'}>
       {isLoading ? <PaceLoadingState label="프로필을 불러오는 중" /> : errorMessage ? (
         <View style={tabScreenStyles.card}>
           <Text style={styles.menuLabel}>프로필을 불러오지 못했어요</Text>
@@ -97,20 +92,6 @@ function AccountProfile() {
           </Pressable>
         ) : null}
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`주간 러닝 목표 ${weeklyGoalKm}킬로미터, 변경하기`}
-        onPress={() => router.push('/weekly-goal')}
-        style={({ pressed }) => [styles.goalCard, pressed && styles.pressed]}>
-        <View>
-          <Text style={styles.goalLabel}>주간 러닝 목표</Text>
-          <Text style={styles.goalValue}>{weeklyGoalKm}<Text style={styles.goalUnit}> km</Text></Text>
-        </View>
-        <View style={styles.goalAction}>
-          <Text style={styles.goalActionText}>변경</Text>
-          <Text style={styles.goalIconText}>›</Text>
-        </View>
-      </Pressable>
       <ProgressSummary />
       <Text style={styles.sectionTitle}>내 메뉴</Text>
       <View style={styles.menuCard}>
@@ -162,13 +143,6 @@ const styles = StyleSheet.create({
   handle: { marginTop: 5, color: C.subtle, fontSize: 10 },
   previewTag: { paddingHorizontal: 9, paddingVertical: 6, borderRadius: 12, backgroundColor: '#20251B' },
   previewTagText: { color: C.accent, fontSize: 9, fontWeight: '600' },
-  goalCard: { marginTop: 13, padding: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 19, backgroundColor: '#20251B' },
-  goalLabel: { color: C.muted, fontSize: 10 },
-  goalValue: { marginTop: 6, color: C.text, fontSize: 26, fontWeight: '700' },
-  goalUnit: { color: C.muted, fontSize: 12, fontWeight: '500' },
-  goalAction: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  goalActionText: { color: C.accent, fontSize: 10, fontWeight: '600' },
-  goalIconText: { color: C.accent, fontSize: 24 },
   sectionTitle: { marginTop: 27, marginBottom: 0, color: C.text, fontSize: 16, fontWeight: '700' },
   menuCard: { marginTop: 10, paddingHorizontal: 16, borderRadius: 16, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   menuRow: { minHeight: 64, paddingVertical: 12, gap: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
-  Easing,
   Modal,
   Pressable,
-  Platform,
   StyleSheet,
   useWindowDimensions,
   View,
@@ -20,7 +17,7 @@ const MIN_LOADING_OFFSET = 24;
 
 /** Logo + label placed at the vertical center of the window, wherever the state is rendered. */
 export function PaceLoadingState({ label = '불러오는 중' }: PaceLoadingStateProps) {
-  const [progress] = useState(() => new Animated.Value(0));
+  const [visible, setVisible] = useState(false);
   const containerRef = useRef<View>(null);
   const { height: windowHeight } = useWindowDimensions();
   const [top, setTop] = useState<number | null>(null);
@@ -34,34 +31,9 @@ export function PaceLoadingState({ label = '불러오는 중' }: PaceLoadingStat
   };
 
   useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(progress, {
-          toValue: 1,
-          duration: 700,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: Platform.OS !== 'web',
-        }),
-        Animated.timing(progress, {
-          toValue: 0,
-          duration: 700,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: Platform.OS !== 'web',
-        }),
-      ]),
-    );
-    animation.start();
-    return () => animation.stop();
-  }, [progress]);
-
-  const logoStyle = {
-    opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }),
-    transform: [
-      {
-        scale: progress.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }),
-      },
-    ],
-  };
+    const timer = setTimeout(() => setVisible(true), 160);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <View
@@ -70,10 +42,10 @@ export function PaceLoadingState({ label = '불러오는 중' }: PaceLoadingStat
       accessibilityLabel={label}
       onLayout={measureTop}
       style={[styles.loading, { paddingTop }]}>
-      <View onLayout={(event) => setContentHeight(event.nativeEvent.layout.height)}>
-        <Animated.View style={[styles.loadingLogo, logoStyle]}>
+      <View style={{ opacity: visible ? 1 : 0 }} onLayout={(event) => setContentHeight(event.nativeEvent.layout.height)}>
+        <View style={styles.loadingLogo}>
           <PaceBrand />
-        </Animated.View>
+        </View>
         <Text style={styles.loadingLabel}>{label}</Text>
       </View>
     </View>

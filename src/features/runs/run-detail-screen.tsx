@@ -24,8 +24,16 @@ import { errorMessage } from '@/lib/api-transport';
 import { useSession } from '@/features/auth/session-store';
 import { PaceButton } from '@/components/pace-button';
 import { exportHealthRun, supportsHealth } from '@/features/health/health-service';
+import { SegmentedControl } from '@/components/segmented-control';
+import { PaceDisclosure } from '@/components/pace-disclosure';
 
 const MAP_HEIGHT = 240;
+type DetailSection = 'summary' | 'reflection' | 'share';
+const SECTIONS = [
+  { value: 'summary', label: '기록 요약' },
+  { value: 'reflection', label: '컨디션 · 메모' },
+  { value: 'share', label: '공유 카드' },
+] as const;
 
 type LoadState =
   | { status: 'loading' }
@@ -44,6 +52,8 @@ function AccountRunDetail() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const { session } = useSession();
   const userId = session?.user.id;
+  const [section, setSection] = useState<DetailSection>('summary');
+  const [visited, setVisited] = useState({ reflection: false, share: false });
 
   useEffect(() => {
     if (!runId) return;
@@ -92,9 +102,14 @@ function AccountRunDetail() {
         <Text style={styles.eyebrow}>RUN DETAIL</Text>
         <Text style={styles.title}>GPS 러닝 기록</Text>
         <Text style={styles.date}>{formatDateTime(run.startedAt)}</Text>
+        <SegmentedControl options={SECTIONS} value={section} style={styles.sections} onChange={(next) => {
+          setSection(next);
+          if (next !== 'summary') setVisited((current) => ({ ...current, [next]: true }));
+        }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={section !== 'summary' && styles.hidden}
+        contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {routeCoordinates.length >= 2 ? (
           <View style={styles.mapWrap}>
             <RunRouteMap coordinates={routeCoordinates} height={MAP_HEIGHT} />
@@ -126,9 +141,7 @@ function AccountRunDetail() {
         <Text style={styles.note}>
           {session ? '계정에 저장된 러닝과 GPS 경로입니다.' : '기기에 저장된 GPS 기록입니다.'}
         </Text>
-        <RunReflection key={`${userId ?? 'guest'}:${run.id}`} run={run} />
-        <RunShareCard run={run} />
-        {supportsHealth ? <>
+        {supportsHealth ? <View style={styles.healthSection}><PaceDisclosure title="Apple 건강 저장 · 연동">
           <PaceButton label="Apple 건강에 저장 · 다시 시도" loading={exporting} variant="secondary"
             onPress={() => {
               setExporting(true);
@@ -141,9 +154,17 @@ function AccountRunDetail() {
             }} />
           <PaceButton label="Apple 건강 연동 설정" variant="secondary" onPress={() => router.push('/health')} />
           <Text style={styles.note}>건강 앱에는 일시 정지를 포함한 시작~종료 시간으로 저장돼요. GPS 경로는 보내지 않아요.</Text>
-        </> : null}
+        </PaceDisclosure></View> : null}
         {healthMessage ? <Text accessibilityLiveRegion="polite" style={styles.note}>{healthMessage}</Text> : null}
       </ScrollView>
+      {visited.reflection ? <ScrollView style={section !== 'reflection' && styles.hidden}
+        contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+        <RunReflection key={`${userId ?? 'guest'}:${run.id}`} run={run} />
+      </ScrollView> : null}
+      {visited.share ? <ScrollView style={section !== 'share' && styles.hidden}
+        contentContainerStyle={styles.content}>
+        <RunShareCard run={run} ready={section === 'share'} />
+      </ScrollView> : null}
     </SafeAreaView>
   );
 }
@@ -161,6 +182,9 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.background },
   fixedContent: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24 },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 36 },
+  sections: { marginTop: 18, marginBottom: 8 },
+  hidden: { display: 'none' },
+  healthSection: { marginTop: 24 },
   eyebrow: { marginTop: 23, color: C.accent, fontSize: 9, fontWeight: '600', letterSpacing: 1.7 },
   title: { marginTop: 8, color: C.text, fontSize: 23, fontWeight: '700' },
   date: { marginTop: 5, color: C.muted, fontSize: 10 },

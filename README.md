@@ -36,6 +36,9 @@ APIs rather than sample data; an empty account can create a crew or race room.
 - Brand/back navigation, page titles, and introductory descriptions stay fixed together;
   only the body scrolls on tabs and secondary list, detail, form, and settings screens.
   Login and onboarding keep their scrollable introduction layouts.
+- 같은 계정·같은 조회의 화면 재진입은 기존 콘텐츠를 유지한 채 갱신합니다.
+  계정이나 조회 조건이 바뀌면 이전 데이터를 노출하지 않으며, 조회 실패는 오류·재시도로 안내합니다.
+  최초 로딩 로고는 160ms 이상 걸릴 때만 점멸 없이 표시해 짧은 조회에서의 깜빡임을 줄입니다.
 - The crew tab has two segments. **Crew** shows weekly/monthly crew distance
   rankings, crew detail (member distances, invite code), create, join by invite
   code or request, request approval/rejection, leadership transfer, and leave
@@ -202,6 +205,7 @@ Expo Go, 웹, TypeScript 검사만으로 Apple 로그인·Face ID·HealthKit의 
   외부 배지 에셋 라이선스나 유료 구독은 필요하지 않으며 새 네이티브 의존성도 추가하지 않습니다.
   게스트는 기기의 PACE 기록에서 계산합니다. Apple 건강에서 읽은 운동은 중복 합산하지 않습니다.
 - 주간 목표는 기존 계정 설정의 `weeklyGoalMeters`를 그대로 사용합니다.
+  마이 화면의 중복 목표 설정 카드는 제거하고 나의 러닝 컬렉션에서 변경합니다.
   주·월 집계는 Asia/Seoul 기준입니다. 개인 최고 기록은 최장 거리와 실제 연속 GPS 1km 최단 경과 시간입니다.
   GPS 시각·거리로 정확히 1km 경계를 보간하고, 30초 초과 공백·부정확한 위치·비현실적 속도 구간을 끊습니다.
   짧은 정지는 경과 시간에 포함되며 전체 평균 페이스를 1/5/10km 기록으로 임의 환산하지 않습니다.
@@ -212,6 +216,9 @@ Expo Go, 웹, TypeScript 검사만으로 Apple 로그인·Face ID·HealthKit의 
   백그라운드 GPS 기록과 달리 잠금/다른 화면에서 음성 안내를 보장하지 않으며 iPhone 무음 모드에서는 들리지 않을 수 있습니다.
 - 러닝 시작·일시정지·종료 버튼과 뒤로가기는 스크롤 밖에 고정합니다. 종료 화면에서 성취·배지와 공유 카드를 확인하고
   러닝 상세에서 컨디션(쉬움/적당/힘듦)·500자 이내 메모를 저장합니다.
+  상세는 고정된 기록 요약 / 컨디션·메모 / 공유 카드 탭과 개별 스크롤로 나눕니다.
+  회고·공유는 처음 선택할 때 열고, 탭 전환 중에는 작성 중 메모와 스크롤 상태를 유지합니다.
+  건강 저장·설정 버튼은 요약의 펼침 영역에 간격을 두어 배치하며 공유 이미지는 공유 탭에서 준비합니다.
   로그인 계정은 러닝 서버 동기화 후 회고를 계정에 저장하며, 게스트 회고는 기기에만 저장합니다.
 - 공유 이미지는 완료 화면에서 자동 생성되는 인증서 스타일 PNG이며 거리·시간·페이스·경로 개요,
   해당 러닝에서 얻은 배지·PR을 포함합니다. 프라이버시 옵션을 바꾸면 이미지를 다시 만들고,
