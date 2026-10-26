@@ -113,6 +113,7 @@ function AccountSettings() {
             ['/privacy', '개인정보 처리방침'],
             ['/terms', '이용약관'],
             ['/support', '도움말 · 문의 및 삭제 요청'],
+            ['/app-update', '앱 정보 · 업데이트'],
           ] as const).map(([route, label]) => <Pressable key={route} accessibilityRole="link"
             style={styles.actionRow} onPress={() => router.push(route === '/permissions'
               ? { pathname: route, params: { from: 'settings' } } : route)}>

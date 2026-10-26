@@ -11,13 +11,13 @@ export function BackHeader({ backLabel = '이전 화면으로 돌아가기' }: {
 
   return (
     <View style={styles.header}>
-      <Pressable
+      {router.canGoBack() ? <Pressable
         accessibilityRole="button"
         accessibilityLabel={backLabel}
         onPress={() => router.back()}
         style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
         <Text style={styles.backArrow}>‹</Text>
-      </Pressable>
+      </Pressable> : <View style={styles.spacer} />}
       <PaceBrand />
       <View style={styles.spacer} />
     </View>

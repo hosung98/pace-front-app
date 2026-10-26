@@ -12,7 +12,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
 import { BackHeader } from '@/components/back-header';
-import { PaceMark } from '@/components/pace-brand';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { PaceErrorDialog } from '@/components/pace-feedback';
@@ -74,17 +73,15 @@ export function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
+      <View style={styles.header}>
+        <BackHeader />
+      </View>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         bounces={false}
         showsVerticalScrollIndicator={false}>
         <View style={styles.container}>
-          <BackHeader />
-
           <View style={styles.intro}>
-            <View style={styles.markFrame}>
-              <PaceMark size={36} />
-            </View>
             <Text style={styles.title}>나만의 페이스로,{'\n'}함께 달려요.</Text>
             <Text style={styles.description}>
               로그인하고 러닝 기록을 이어가세요.
@@ -146,6 +143,9 @@ export function LoginScreen() {
               <Text style={styles.legalLinkText}>도움말 · 문의</Text>
             </Pressable>
           </View>
+          <Pressable accessibilityRole="link" onPress={() => router.push('/app-update')} style={styles.legalLink}>
+            <Text style={styles.versionLink}>앱 정보 · 업데이트</Text>
+          </Pressable>
         </View>
       </ScrollView>
       <PaceErrorDialog message={failure} onClose={() => {
@@ -172,21 +172,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingBottom: 28,
   },
+  header: { width: '100%', maxWidth: 480, alignSelf: 'center', paddingHorizontal: 28 },
   intro: {
     alignItems: 'center',
     paddingTop: 32,
     paddingBottom: 32,
-  },
-  markFrame: {
-    width: 72,
-    height: 72,
-    marginBottom: 8,
-    borderRadius: 24,
-    backgroundColor: C.surface,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
   },
   title: {
     marginTop: 16,
@@ -222,6 +212,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   providerIcon: { width: 20, height: 20 },
+  versionLink: { color: C.subtle, fontSize: 11, textAlign: 'center' },
   google: {
     backgroundColor: '#F4F5F0',
   },

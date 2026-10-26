@@ -137,3 +137,55 @@ test('Google 버튼은 로컬 공식 아이콘을 포함하고 Apple 버튼은 4
   assert.equal(elements(login, 'ProviderText').length, 1);
   assert.match(login.text, /providerText:\s*\{\s*fontSize: 19,/);
 });
+
+test('iOS 로그인 분기는 로고와 텍스트를 가로 배치하며 Apple은 별도 버튼으로 렌더링한다', () => {
+  const file = source('features/auth/login-screen.tsx');
+  const jsx = (type, props) => ({ type, props });
+  const router = { push() {}, replace() {} };
+  const mocks = {
+    react: { useCallback: (fn) => fn, useRef: (current) => ({ current }), useState: (value) => [value, () => {}] },
+    'react/jsx-runtime': { jsx, jsxs: jsx },
+    'react-native': {
+      Platform: { OS: 'ios' }, Pressable: 'Pressable', ScrollView: 'ScrollView', View: 'View',
+      Text: 'ProviderText', StyleSheet: { create: (styles) => styles },
+    },
+    'expo-router': { useRouter: () => router },
+    'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
+    'expo-image': { Image: 'Image' },
+    '@/components/back-header': { BackHeader: 'BackHeader' },
+    '@/components/pace-text': { PaceText: 'Text' },
+    '@/constants/pace': { PaceColors: {} },
+    '@/components/pace-feedback': { PaceErrorDialog: 'PaceErrorDialog' },
+    '@/constants/api': {}, '@/data/completed-runs-repository': {}, '@/data/active-run-store': {},
+    '@/lib/api-transport': {}, './google-login': {}, './apple-login': {},
+    './google-web-button': { GoogleWebButton: 'GoogleWebButton' },
+    './apple-login-button': { AppleLoginButton: 'AppleLoginButton' },
+    './session-store': { useSession: () => ({ session: null }) },
+    '@/assets/images/google-logo.png': 'bundled-google-logo',
+  };
+  const module = { exports: {} };
+  vm.runInNewContext(ts.transpileModule(file.text, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText, { module, exports: module.exports, console, require: (name) => {
+    if (!(name in mocks)) throw new Error(`Unexpected import ${name}`);
+    return mocks[name];
+  } });
+  const tree = module.exports.LoginScreen();
+  const nodes = [];
+  const visit = (node, parents = []) => {
+    if (!node || typeof node !== 'object') return;
+    nodes.push({ node, parents });
+    const children = node.props?.children;
+    for (const child of Array.isArray(children) ? children : [children]) visit(child, [...parents, node]);
+  };
+  visit(tree);
+  const google = nodes.find(({ node }) => node.props.accessibilityLabel === 'Google로 계속하기').node;
+  assert.equal(google.props.children[0].type, 'Image');
+  assert.equal(google.props.children[0].props.source, 'bundled-google-logo');
+  assert.equal(google.props.children[1].type, 'ProviderText');
+  assert.equal(google.props.style({ pressed: false })[0].flexDirection, 'row');
+  const apple = nodes.find(({ node }) => node.type === 'AppleLoginButton');
+  assert.equal(apple.parents.includes(google), false);
+  const header = nodes.find(({ node }) => node.type === 'BackHeader');
+  assert.equal(header.parents.some((node) => node.type === 'ScrollView'), false);
+});
