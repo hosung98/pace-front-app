@@ -13,8 +13,8 @@ export function CommunitySignIn() {
   return (
     <View style={styles.card}>
       <Text style={styles.title}>로그인하고 함께 달려요</Text>
-      <Text style={styles.description}>크루와 대결은 계정에 저장돼요. Google 로그인 후 직접 만들거나 초대 코드로 참가할 수 있어요.</Text>
-      <PaceButton label="Google 로그인" onPress={() => router.push('/login')} />
+      <Text style={styles.description}>크루와 대결은 계정에 저장돼요. Google · Apple 로그인 후 직접 만들거나 초대 코드로 참가할 수 있어요.</Text>
+      <PaceButton label="로그인하기" onPress={() => router.push('/login')} />
     </View>
   );
 }

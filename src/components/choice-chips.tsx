@@ -11,6 +11,7 @@ type ChoiceChipsProps<T extends string | number> = Readonly<{
   scrollable?: boolean;
   size?: 'regular' | 'small';
   style?: StyleProp<ViewStyle>;
+  disabled?: boolean;
 }>;
 
 export function ChoiceChips<T extends string | number>({
@@ -20,6 +21,7 @@ export function ChoiceChips<T extends string | number>({
   scrollable = false,
   size = 'regular',
   style,
+  disabled = false,
 }: ChoiceChipsProps<T>) {
   const chips = options.map((option) => {
     const selected = option.value === value;
@@ -27,7 +29,8 @@ export function ChoiceChips<T extends string | number>({
       <Pressable
         key={String(option.value)}
         accessibilityRole="radio"
-        accessibilityState={{ checked: selected }}
+        accessibilityState={{ checked: selected, disabled }}
+        disabled={disabled}
         onPress={() => onChange(option.value)}
         style={({ pressed }) => [
           styles.chip,

@@ -8,12 +8,12 @@ import { PaceButton } from '@/components/pace-button';
 import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
-import { createCrew } from '@/data/crew-repository';
+import { createCrew, updateCrew } from '@/data/crew-repository';
 
 import { LocateRegionButton, RegionPicker, type RegionSelection } from './region-picker';
-import { CREW_INTRO_MAX_LENGTH, CREW_MAX_MEMBERS, CREW_NAME_MAX_LENGTH } from './types';
+import { CREW_INTRO_MAX_LENGTH, CREW_MAX_MEMBERS, CREW_NAME_MAX_LENGTH, type CrewDetail } from './types';
 
-export function CrewCreateScreen() {
+export function CrewCreateScreen({ crew }: Readonly<{ crew?: CrewDetail }> = {}) {
   const router = useRouter();
   const submitting = useRef(false);
   const focused = useRef(false);
@@ -21,9 +21,9 @@ export function CrewCreateScreen() {
     focused.current = true;
     return () => { focused.current = false; };
   }, []));
-  const [name, setName] = useState('');
-  const [intro, setIntro] = useState('');
-  const [region, setRegion] = useState<RegionSelection>({ sido: null, sigungu: null });
+  const [name, setName] = useState(crew?.name ?? '');
+  const [intro, setIntro] = useState(crew?.intro ?? '');
+  const [region, setRegion] = useState<RegionSelection>(crew?.region ?? { sido: null, sigungu: null });
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -36,12 +36,20 @@ export function CrewCreateScreen() {
     submitting.current = true;
     setSaving(true);
     try {
-      const crewId = await createCrew({
+      const input = {
         name: trimmedName,
         intro,
         region: region.sido ? { sido: region.sido, sigungu: region.sigungu } : null,
-      });
-      if (focused.current) router.replace({ pathname: '/crew-detail', params: { crewId } });
+      };
+      let crewId: string;
+      if (crew) {
+        await updateCrew(crew.id, input);
+        crewId = crew.id;
+      } else crewId = await createCrew(input);
+      if (focused.current) {
+        if (crew && router.canGoBack()) router.back();
+        else router.replace({ pathname: '/crew-detail', params: { crewId } });
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '크루를 만들지 못했어요.');
     } finally {
@@ -55,10 +63,10 @@ export function CrewCreateScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <BackHeader backLabel="크루 화면으로 돌아가기" />
-          <Text style={styles.eyebrow}>NEW CREW</Text>
-          <Text style={styles.title}>크루 만들기</Text>
+          <Text style={styles.eyebrow}>{crew ? 'EDIT CREW' : 'NEW CREW'}</Text>
+          <Text style={styles.title}>{crew ? '크루 정보 수정' : '크루 만들기'}</Text>
           <Text style={styles.description}>
-            만든 사람이 크루장이 돼요. 초대 코드를 공유하거나 가입 신청을 승인해서 멤버를 모아요.
+            {crew ? '멤버들이 알아볼 수 있도록 이름과 소개, 활동 지역을 관리해요.' : '만든 사람이 크루장이 돼요. 초대 코드를 공유하거나 가입 신청을 승인해서 멤버를 모아요.'}
           </Text>
 
           <Field label="크루 이름" count={`${name.length}/${CREW_NAME_MAX_LENGTH}`}>
@@ -89,9 +97,9 @@ export function CrewCreateScreen() {
 
           <Field
             label="활동 지역"
-            accessory={<LocateRegionButton onLocated={setRegion} onError={setLocationError} />}
+            accessory={<LocateRegionButton disabled={saving} onLocated={setRegion} onError={setLocationError} />}
             caption="크루 찾기에서 지역으로 검색돼요. 정확한 위치는 저장하지 않아요.">
-            <RegionPicker value={region} onChange={setRegion} allSigunguLabel="시/도 전체" />
+            <RegionPicker disabled={saving} value={region} onChange={setRegion} allSigunguLabel="시/도 전체" />
           </Field>
 
           <View style={styles.rules}>
@@ -101,7 +109,7 @@ export function CrewCreateScreen() {
           </View>
 
           <PaceButton
-            label="크루 만들기"
+            label={crew ? '변경 사항 저장' : '크루 만들기'}
             disabled={!canSubmit}
             loading={saving}
             onPress={() => void submit()}
@@ -109,7 +117,7 @@ export function CrewCreateScreen() {
           />
         </ScrollView>
       </KeyboardAvoidingView>
-      <PaceErrorDialog message={errorMessage} onClose={() => setErrorMessage(null)} title="크루를 만들 수 없어요" />
+      <PaceErrorDialog message={errorMessage} onClose={() => setErrorMessage(null)} title={crew ? '크루를 수정하지 못했어요' : '크루를 만들 수 없어요'} />
       <PaceErrorDialog message={locationError} onClose={() => setLocationError(null)} title="지역을 찾지 못했어요" />
     </SafeAreaView>
   );

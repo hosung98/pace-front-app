@@ -9,7 +9,7 @@ import { PaceButton } from '@/components/pace-button';
 import { PaceErrorDialog } from '@/components/pace-feedback';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
-import { createRace } from '@/data/race-repository';
+import { createRace, updateRace } from '@/data/race-repository';
 import { useNow } from '@/hooks/use-now';
 
 import { formatRaceDistance, formatRaceStart, getJoinDeadline } from './race-status';
@@ -18,7 +18,7 @@ import {
   RACE_DISTANCE_OPTIONS_METERS,
   RACE_MAX_PARTICIPANTS,
   RACE_MIN_PARTICIPANTS,
-  type RaceVisibility,
+  type RaceVisibility, type RaceDetail,
 } from './types';
 
 const DAY_OPTIONS = ['오늘', '내일', '모레'] as const;
@@ -32,8 +32,8 @@ function defaultStartMinutes(): number {
   return Math.min(Math.ceil(minutes / 60) * 60, 23 * 60 + 30);
 }
 
-function toStartsAt(dayOffset: number, minutesOfDay: number): number {
-  const date = new Date();
+function toStartsAt(dayOffset: number, minutesOfDay: number, baseDate: number): number {
+  const date = new Date(baseDate);
   date.setDate(date.getDate() + dayOffset);
   date.setHours(Math.floor(minutesOfDay / 60), minutesOfDay % 60, 0, 0);
   return date.getTime();
@@ -47,7 +47,16 @@ function formatClock(minutesOfDay: number): string {
   return `${period} ${displayHour}:${String(minutes).padStart(2, '0')}`;
 }
 
-export function RaceCreateScreen() {
+function initialSchedule(race?: RaceDetail) {
+  const baseDate = new Date().setHours(0, 0, 0, 0);
+  if (!race) return { baseDate, day: 0, minutes: defaultStartMinutes() };
+  const start = new Date(race.startsAt);
+  const minutes = start.getHours() * 60 + start.getMinutes();
+  const day = Math.round((start.setHours(0, 0, 0, 0) - baseDate) / 86_400_000);
+  return { baseDate, day, minutes };
+}
+
+export function RaceCreateScreen({ race }: Readonly<{ race?: RaceDetail }> = {}) {
   const router = useRouter();
   const submitting = useRef(false);
   const focused = useRef(false);
@@ -56,28 +65,34 @@ export function RaceCreateScreen() {
     return () => { focused.current = false; };
   }, []));
   const now = useNow(30_000);
-  const [title, setTitle] = useState('');
-  const [distanceMeters, setDistanceMeters] = useState<number>(5000);
-  const [dayOffset, setDayOffset] = useState(0);
-  const [minutesOfDay, setMinutesOfDay] = useState(defaultStartMinutes);
-  const [deadlineMinutes, setDeadlineMinutes] = useState<number>(30);
-  const [minParticipants, setMinParticipants] = useState(3);
-  const [maxParticipants, setMaxParticipants] = useState(10);
-  const [visibility, setVisibility] = useState<RaceVisibility>('public');
+  const [{ baseDate, day: initialDay, minutes: initialMinutes }] = useState(() => initialSchedule(race));
+  const [title, setTitle] = useState(race?.title ?? '');
+  const [distanceMeters, setDistanceMeters] = useState<number>(race?.distanceMeters ?? 5000);
+  const [dayOffset, setDayOffset] = useState(initialDay);
+  const [minutesOfDay, setMinutesOfDay] = useState(initialMinutes);
+  const [deadlineMinutes, setDeadlineMinutes] = useState<number>(race?.joinDeadlineMinutes ?? 30);
+  const [minParticipants, setMinParticipants] = useState(race?.minParticipants ?? 3);
+  const [maxParticipants, setMaxParticipants] = useState(race?.maxParticipants ?? 10);
+  const [visibility, setVisibility] = useState<RaceVisibility>(race?.visibility ?? 'public');
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const startsAt = toStartsAt(dayOffset, minutesOfDay);
+  const termsLocked = Boolean(race && race.participantCount > 1);
+  const startsAt = race && dayOffset === initialDay && minutesOfDay === initialMinutes
+    ? race.startsAt : toStartsAt(dayOffset, minutesOfDay, baseDate);
   const joinDeadline = getJoinDeadline({ startsAt, joinDeadlineMinutes: deadlineMinutes });
-  const tooSoon = joinDeadline - now < MIN_RECRUIT_MINUTES * 60_000;
+  const tooSoon = joinDeadline - now < (race ? 0 : MIN_RECRUIT_MINUTES * 60_000);
+  const closed = Boolean(race && (race.cancelled || getJoinDeadline(race) <= now));
+  const dayOptions: { value: number; label: string }[] = DAY_OPTIONS.map((label, value) => ({ value, label }));
+  if (initialDay > 2) dayOptions.push({ value: initialDay, label: `${initialDay}일 후` });
   const autoTitle = `${formatClock(minutesOfDay)} ${formatRaceDistance(distanceMeters)} 대결`;
 
   const submit = async () => {
-    if (submitting.current || tooSoon) return;
+    if (submitting.current || tooSoon || closed) return;
     submitting.current = true;
     setSaving(true);
     try {
-      const raceId = await createRace({
+      const input = {
         title: title.trim() || autoTitle,
         distanceMeters,
         startsAt,
@@ -85,10 +100,18 @@ export function RaceCreateScreen() {
         minParticipants,
         maxParticipants,
         visibility,
-      });
-      if (focused.current) router.replace({ pathname: '/race-detail', params: { raceId } });
+      };
+      let raceId: string;
+      if (race) {
+        await updateRace(race.id, input);
+        raceId = race.id;
+      } else raceId = await createRace(input);
+      if (focused.current) {
+        if (race && router.canGoBack()) router.back();
+        else router.replace({ pathname: '/race-detail', params: { raceId } });
+      }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : '대결 방을 만들지 못했어요.');
+      setErrorMessage(error instanceof Error ? error.message : '대결 정보를 저장하지 못했어요.');
     } finally {
       submitting.current = false;
       setSaving(false);
@@ -100,8 +123,11 @@ export function RaceCreateScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <BackHeader backLabel="대결 화면으로 돌아가기" />
-          <Text style={styles.eyebrow}>NEW RACE</Text>
-          <Text style={styles.title}>대결 방 만들기</Text>
+          <Text style={styles.eyebrow}>{race ? 'EDIT RACE' : 'NEW RACE'}</Text>
+          <Text style={styles.title}>{race ? '대결 정보 수정' : '대결 방 만들기'}</Text>
+          {race ? <Text style={styles.rule}>{termsLocked
+            ? '다른 참가자가 있어 이름과 최대 인원만 수정할 수 있어요. 최대 인원은 현재 참가 인원보다 줄일 수 없어요.'
+            : '모집 중일 때만 수정할 수 있어요. 다른 참가자가 들어오면 거리·시간 등 약속 조건은 변경할 수 없어요.'}</Text> : null}
 
           <Section label="방 이름 (선택)">
             <TextInput
@@ -109,7 +135,7 @@ export function RaceCreateScreen() {
               value={title}
               editable={!saving}
               onChangeText={setTitle}
-              maxLength={30}
+              maxLength={60}
               placeholder={autoTitle}
               placeholderTextColor={C.subtle}
               style={styles.input}
@@ -118,6 +144,7 @@ export function RaceCreateScreen() {
 
           <Section label="거리">
             <ChoiceChips
+              disabled={saving || termsLocked || closed}
               options={RACE_DISTANCE_OPTIONS_METERS.map((value) => ({ value, label: formatRaceDistance(value) }))}
               value={distanceMeters}
               onChange={setDistanceMeters}
@@ -126,7 +153,8 @@ export function RaceCreateScreen() {
 
           <Section label="시작 시간">
             <ChoiceChips
-              options={DAY_OPTIONS.map((label, value) => ({ value, label }))}
+              disabled={saving || termsLocked || closed}
+              options={dayOptions}
               value={dayOffset}
               onChange={setDayOffset}
             />
@@ -134,14 +162,14 @@ export function RaceCreateScreen() {
               <StepButton
                 label="−"
                 accessibilityLabel="30분 앞당기기"
-                disabled={minutesOfDay <= 0}
+                disabled={saving || termsLocked || closed || minutesOfDay <= 0}
                 onPress={() => setMinutesOfDay((value) => Math.max(0, value - TIME_STEP_MINUTES))}
               />
               <Text style={styles.clock}>{formatClock(minutesOfDay)}</Text>
               <StepButton
                 label="+"
                 accessibilityLabel="30분 미루기"
-                disabled={minutesOfDay >= 23 * 60 + 30}
+                disabled={saving || termsLocked || closed || minutesOfDay >= 23 * 60 + 30}
                 onPress={() => setMinutesOfDay((value) => Math.min(23 * 60 + 30, value + TIME_STEP_MINUTES))}
               />
             </View>
@@ -149,6 +177,7 @@ export function RaceCreateScreen() {
 
           <Section label="모집 마감" caption="마감 시점에 최소 인원이 안 되면 자동으로 취소돼요.">
             <ChoiceChips
+              disabled={saving || termsLocked || closed}
               options={RACE_DEADLINE_OPTIONS_MINUTES.map((value) => ({ value, label: `${value}분 전` }))}
               value={deadlineMinutes}
               onChange={setDeadlineMinutes}
@@ -159,6 +188,7 @@ export function RaceCreateScreen() {
             <View style={styles.countRow}>
               <Counter
                 label="최소"
+                disabled={saving || termsLocked || closed}
                 value={minParticipants}
                 min={RACE_MIN_PARTICIPANTS}
                 max={maxParticipants}
@@ -166,8 +196,9 @@ export function RaceCreateScreen() {
               />
               <Counter
                 label="최대"
+                disabled={saving || closed}
                 value={maxParticipants}
-                min={minParticipants}
+                min={Math.max(minParticipants, race?.participantCount ?? 1)}
                 max={RACE_MAX_PARTICIPANTS}
                 onChange={setMaxParticipants}
               />
@@ -178,6 +209,7 @@ export function RaceCreateScreen() {
             label="공개 범위"
             caption={visibility === 'public' ? '대결 목록에 보이고 누구나 참가할 수 있어요.' : '초대 코드를 받은 사람만 참가할 수 있어요.'}>
             <ChoiceChips
+              disabled={saving || termsLocked || closed}
               options={[
                 { value: 'public' as const, label: '공개' },
                 { value: 'private' as const, label: '비공개 (코드)' },
@@ -205,15 +237,15 @@ export function RaceCreateScreen() {
           </Text>
 
           <PaceButton
-            label="방 만들기"
-            disabled={tooSoon}
+            label={race ? '변경 사항 저장' : '방 만들기'}
+            disabled={tooSoon || closed}
             loading={saving}
             onPress={() => void submit()}
             style={styles.submit}
           />
         </ScrollView>
       </KeyboardAvoidingView>
-      <PaceErrorDialog message={errorMessage} onClose={() => setErrorMessage(null)} title="방을 만들 수 없어요" />
+      <PaceErrorDialog message={errorMessage} onClose={() => setErrorMessage(null)} title={race ? '대결을 수정하지 못했어요' : '방을 만들 수 없어요'} />
     </SafeAreaView>
   );
 }
@@ -253,14 +285,15 @@ function Counter({
   min,
   max,
   onChange,
-}: Readonly<{ label: string; value: number; min: number; max: number; onChange: (value: number) => void }>) {
+  disabled = false,
+}: Readonly<{ label: string; value: number; min: number; max: number; onChange: (value: number) => void; disabled?: boolean }>) {
   return (
     <View style={styles.counter}>
       <Text style={styles.counterLabel}>{label}</Text>
       <View style={styles.counterBody}>
-        <StepButton label="−" accessibilityLabel={`${label} 인원 줄이기`} disabled={value <= min} onPress={() => onChange(value - 1)} />
+        <StepButton label="−" accessibilityLabel={`${label} 인원 줄이기`} disabled={disabled || value <= min} onPress={() => onChange(value - 1)} />
         <Text style={styles.counterValue}>{value}명</Text>
-        <StepButton label="+" accessibilityLabel={`${label} 인원 늘리기`} disabled={value >= max} onPress={() => onChange(value + 1)} />
+        <StepButton label="+" accessibilityLabel={`${label} 인원 늘리기`} disabled={disabled || value >= max} onPress={() => onChange(value + 1)} />
       </View>
     </View>
   );
@@ -292,8 +325,8 @@ const styles = StyleSheet.create({
   stepDisabled: { opacity: 0.35 },
   stepText: { color: C.text, fontSize: 20, fontWeight: '600' },
   pressed: { opacity: 0.7 },
-  countRow: { flexDirection: 'row', gap: 10 },
-  counter: { flex: 1, padding: 12, borderRadius: 16, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  countRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  counter: { flexGrow: 1, flexBasis: 148, padding: 12, borderRadius: 16, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   counterLabel: { color: C.subtle, fontSize: 11 },
   counterBody: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   counterValue: { color: C.text, fontSize: 16, fontWeight: '700' },

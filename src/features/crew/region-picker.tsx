@@ -19,10 +19,11 @@ type RegionPickerProps = Readonly<{
   allSidoLabel?: string;
   /** Label for "whole 시/도" in the 시/군/구 row. */
   allSigunguLabel?: string;
+  disabled?: boolean;
 }>;
 
 /** Two scrollable chip rows: 시/도, then that 시/도's 시/군/구. */
-export function RegionPicker({ value, onChange, allSidoLabel, allSigunguLabel = '전체' }: RegionPickerProps) {
+export function RegionPicker({ value, onChange, allSidoLabel, allSigunguLabel = '전체', disabled = false }: RegionPickerProps) {
   const sidoOptions = [
     ...(allSidoLabel ? [{ value: ALL, label: allSidoLabel }] : []),
     ...SIDO_LIST.map((sido) => ({ value: sido, label: sido })),
@@ -33,6 +34,7 @@ export function RegionPicker({ value, onChange, allSidoLabel, allSigunguLabel = 
     <View style={styles.wrap}>
       <ChoiceChips
         scrollable
+        disabled={disabled}
         size="small"
         options={sidoOptions}
         value={value.sido ?? ALL}
@@ -41,6 +43,7 @@ export function RegionPicker({ value, onChange, allSidoLabel, allSigunguLabel = 
       {value.sido && sigunguList.length > 0 ? (
         <ChoiceChips
           scrollable
+          disabled={disabled}
           size="small"
           options={[
             { value: ALL, label: allSigunguLabel },
@@ -59,7 +62,8 @@ export function RegionPicker({ value, onChange, allSidoLabel, allSigunguLabel = 
 export function LocateRegionButton({
   onLocated,
   onError,
-}: Readonly<{ onLocated: (value: RegionSelection) => void; onError: (message: string) => void }>) {
+  disabled = false,
+}: Readonly<{ onLocated: (value: RegionSelection) => void; onError: (message: string) => void; disabled?: boolean }>) {
   const [locating, setLocating] = useState(false);
 
   const locate = async () => {
@@ -78,7 +82,7 @@ export function LocateRegionButton({
       accessibilityRole="button"
       accessibilityLabel="내 위치로 지역 선택"
       accessibilityState={{ busy: locating }}
-      disabled={locating}
+      disabled={locating || disabled}
       hitSlop={8}
       onPress={() => void locate()}
       style={({ pressed }) => [styles.locate, pressed && styles.pressed]}>

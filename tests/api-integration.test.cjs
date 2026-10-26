@@ -514,6 +514,25 @@ test('크루 생성·검색·가입·승인·위임은 실제 API를 사용하�
   await assert.rejects(crews.getCrewRankings('week'), /서버 미배포/);
 });
 
+test('크루·대결 수정은 경로 ID를 인코딩하고 정리된 입력을 PATCH 전송하며 서버 실패를 전파한다', async () => {
+  const h = await harness();
+  await h.session.acceptSession(tokens());
+  const calls = [];
+  h.fetch = async (url, options) => { calls.push({ url, options }); return new Response(null, { status: 204 }); };
+  const crews = h.load('data/crew-repository');
+  await crews.updateCrew('crew/id', { name: '  새 이름 ', intro: ' 소개 ', region: { sido: '서울', sigungu: null } });
+  assert.match(calls[0].url, /crews\/crew%2Fid$/);
+  assert.equal(calls[0].options.method, 'PATCH');
+  assert.equal(JSON.parse(calls[0].options.body).name, '새 이름');
+  const races = h.load('data/race-repository');
+  await races.updateRace('race/id', { title: ' 새 대결 ', startsAt: 1793000000123 });
+  assert.match(calls[1].url, /races\/race%2Fid$/);
+  assert.equal(calls[1].options.method, 'PATCH');
+  assert.equal(JSON.parse(calls[1].options.body).startsAt, new Date(1793000000123).toISOString());
+  h.fetch = async () => json({ code: 'CONFLICT', message: '모집이 마감됐어요.' }, 409);
+  await assert.rejects(races.updateRace('id', { title: '이름', startsAt: Date.now() }), /모집이 마감됐어요/);
+});
+
 test('대결 생성 시 UTC ISO를 전송하고 조회 시 epoch로 변환하며 검색 조건을 전달한다', async () => {
   const h = await harness();
   await h.session.acceptSession(tokens());

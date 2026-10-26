@@ -27,6 +27,11 @@ export async function createCrew(input: CreateCrewInput): Promise<string> {
   })).id;
 }
 
+export const updateCrew = (id: string, input: CreateCrewInput) =>
+  api<void>(`/crews/${encodeURIComponent(id)}`, {
+    method: 'PATCH', body: JSON.stringify({ ...input, name: input.name.trim(), intro: input.intro.trim() }),
+  });
+
 export async function joinCrewByCode(code: string): Promise<string> {
   return (await api<{ id: string }>('/crews/join-by-code', {
     method: 'POST', body: JSON.stringify({ code: code.trim().toUpperCase() }),

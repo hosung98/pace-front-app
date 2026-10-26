@@ -28,13 +28,13 @@ export function ProviderLoginButton({ provider, disabled, loading, onPress }: Re
 }
 
 const styles = StyleSheet.create({
-  touchTarget: { minHeight: 48, justifyContent: 'center', paddingVertical: 4 },
-  button: { minHeight: 40, paddingHorizontal: 8, borderRadius: 10, backgroundColor: '#FFFFFF',
+  touchTarget: { minHeight: 52, justifyContent: 'center', paddingVertical: 4 },
+  button: { minHeight: 44, paddingHorizontal: 8, borderRadius: 10, backgroundColor: '#FFFFFF',
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   content: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexShrink: 1 },
-  title: { color: '#000000', fontSize: 17, fontWeight: '400', lineHeight: 22, flexShrink: 1, paddingVertical: 8 },
-  appleIcon: { width: 40 * 31 / 44, height: 40 },
-  googleIcon: { width: 20, height: 20, marginHorizontal: (40 * 31 / 44 - 20) / 2 },
+  title: { color: '#000000', fontSize: 18, fontWeight: '600', lineHeight: 24, flexShrink: 1, paddingVertical: 10 },
+  appleIcon: { width: 31, height: 44 },
+  googleIcon: { width: 20, height: 20, marginHorizontal: (31 - 20) / 2 },
   statusSlot: { width: 24, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.45 },
   pressed: { opacity: 0.7 },

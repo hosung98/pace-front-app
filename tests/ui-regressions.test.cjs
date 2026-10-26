@@ -125,7 +125,7 @@ test('최초 온보딩은 완료를 저장한 뒤에만 권한 안내로 이동�
   assert.deepEqual(h.calls, ['persist', '/permissions']);
 });
 
-test('소셜 버튼은 같은 17pt 시스템 글꼴·40pt 시각 높이·48pt 터치 영역과 로컬 공식 로고를 사용한다', () => {
+test('소셜 버튼은 같은 18pt 반굵은 시스템 글꼴·44pt 시각 높이·52pt 터치 영역과 로컬 공식 로고를 사용한다', () => {
   const logo = fs.readFileSync(path.join(__dirname, '../assets/images/google-logo.png'));
   assert.equal(logo.subarray(1, 4).toString(), 'PNG');
   const appleLogo = fs.readFileSync(path.join(__dirname, '../assets/images/apple-login-logo.svg'), 'utf8');
@@ -147,14 +147,14 @@ test('소셜 버튼은 같은 17pt 시스템 글꼴·40pt 시각 높이·48pt �
     titles.push(title.props.style);
     assert.equal(title.props.children, `${provider === 'apple' ? 'Apple' : 'Google'}로 계속하기`);
     assert.equal(nodes.find(({ node }) => node.type === 'Image').node.props.source, `${provider}-logo`);
-    assert.equal(tree.props.style({ pressed: false })[0].minHeight, 48);
+    assert.equal(tree.props.style({ pressed: false })[0].minHeight, 52);
     assert.equal(tree.props.accessibilityState.busy, provider === 'apple');
     assert.equal(nodes.filter(({ node }) => node.type === 'ActivityIndicator').length, provider === 'apple' ? 1 : 0);
-    assert.equal(nodes.find(({ node }) => node.type === 'View').node.props.style[0].minHeight, 40);
+    assert.equal(nodes.find(({ node }) => node.type === 'View').node.props.style[0].minHeight, 44);
   }
   assert.equal(titles[0], titles[1]);
-  assert.equal(titles[0].fontSize, 17);
-  assert.equal(titles[0].fontWeight, '400');
+  assert.equal(titles[0].fontSize, 18);
+  assert.equal(titles[0].fontWeight, '600');
 });
 
 function flatten(tree) {
@@ -176,7 +176,7 @@ function renderHarness(file, imports) {
   const jsx = (type, props) => ({ type, props });
   const slot = (initial) => {
     const index = cursor++;
-    if (!(index in slots)) slots[index] = initial;
+    if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial;
     return [slots[index], (value) => {
       slots[index] = typeof value === 'function' ? value(slots[index]) : value;
     }];
@@ -317,4 +317,108 @@ test('설정 이용 안내에는 온보딩 링크가 없고 내 메뉴는 별도
   assert.match(menu.getText(), /menuItems\.filter/);
   assert.match(profile.text, /menuCard: \{[^}]*paddingHorizontal: 16/);
   assert.doesNotMatch(profile.text.match(/menuCard: \{([^}]*)/)[1], /\bpadding:|paddingVertical:/);
+});
+
+function communityFormHarness(kind, repository) {
+  return renderHarness(`features/${kind}/${kind}-create-screen.tsx`, {
+    'react-native': {
+      KeyboardAvoidingView: 'KeyboardAvoidingView', Platform: { OS: 'ios' }, Pressable: 'Pressable',
+      ScrollView: 'ScrollView', TextInput: 'TextInput', View: 'View', StyleSheet: { create: (s) => s },
+    },
+    'expo-router': { useRouter: () => ({ canGoBack: () => true, back() {}, replace() {} }), useFocusEffect: (fn) => fn() },
+    'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
+    '@/components/back-header': { BackHeader: 'BackHeader' },
+    '@/components/choice-chips': { ChoiceChips: 'ChoiceChips' },
+    '@/components/pace-button': { PaceButton: 'PaceButton' },
+    '@/components/pace-feedback': { PaceErrorDialog: 'PaceErrorDialog' },
+    '@/components/pace-text': { PaceText: 'Text' }, '@/constants/pace': { PaceColors: {} },
+    [`@/data/${kind}-repository`]: repository,
+    '@/hooks/use-now': { useNow: () => Date.now() },
+    './race-status': {
+      getJoinDeadline: (r) => r.startsAt - r.joinDeadlineMinutes * 60000,
+      formatRaceDistance: String, formatRaceStart: String,
+    },
+    './region-picker': { LocateRegionButton: 'LocateRegionButton', RegionPicker: 'RegionPicker' },
+    './types': {
+      CREW_INTRO_MAX_LENGTH: 100, CREW_NAME_MAX_LENGTH: 20, CREW_MAX_MEMBERS: 50,
+      RACE_DEADLINE_OPTIONS_MINUTES: [10, 30, 60], RACE_DISTANCE_OPTIONS_METERS: [3000, 5000, 10000, 21097],
+      RACE_MAX_PARTICIPANTS: 20, RACE_MIN_PARTICIPANTS: 2,
+    },
+  });
+}
+
+test('크루 수정은 기존 필드를 채우고 생성 대신 PATCH 저장을 실행한다', async () => {
+  let saved;
+  const h = communityFormHarness('crew', {
+    createCrew: () => { throw new Error('생성을 호출하면 안 됩니다'); },
+    updateCrew: async (...args) => { saved = args; },
+  });
+  const crew = { id: 'crew-1', name: '기존 이름', intro: '소개', region: { sido: '서울', sigungu: null } };
+  let nodes = flatten(h.render('CrewCreateScreen', { crew }));
+  const name = nodes.find(({ node }) => node.props.accessibilityLabel === '크루 이름').node.props;
+  assert.equal(name.value, crew.name);
+  name.onChangeText('수정한 이름');
+  nodes = flatten(h.render('CrewCreateScreen', { crew }));
+  nodes.find(({ node }) => node.props.label === '변경 사항 저장').node.props.onPress();
+  await new Promise(setImmediate);
+  assert.equal(saved[0], crew.id);
+  assert.equal(saved[1].name, '수정한 이름');
+  assert.equal(saved[1].region.sido, '서울');
+});
+
+test('참가자가 있는 대결 수정은 약속 조건을 잠그고 정확한 원본 시각을 보존해 저장한다', async () => {
+  let saved;
+  const h = communityFormHarness('race', {
+    createRace: () => { throw new Error('생성을 호출하면 안 됩니다'); },
+    updateRace: async (...args) => { saved = args; },
+  });
+  const race = {
+    id: 'race-1', title: '기존 대결', distanceMeters: 10000, startsAt: Date.now() + 6 * 86400000 + 1234,
+    joinDeadlineMinutes: 30, minParticipants: 2, maxParticipants: 10,
+    visibility: 'private', participantCount: 3, cancelled: false,
+  };
+  let nodes = flatten(h.render('RaceCreateScreen', { race }));
+  for (const { node } of nodes.filter(({ node }) => node.type === 'ChoiceChips')) assert.equal(node.props.disabled, true);
+  assert.equal(nodes.find(({ node }) => node.props.label === '최대').node.props.min, 3);
+  assert.equal(nodes.find(({ node }) => node.props.label === '최소').node.props.disabled, true);
+  nodes.find(({ node }) => node.props.accessibilityLabel === '방 이름').node.props.onChangeText('수정한 대결');
+  nodes = flatten(h.render('RaceCreateScreen', { race }));
+  nodes.find(({ node }) => node.props.label === '변경 사항 저장').node.props.onPress();
+  await new Promise(setImmediate);
+  assert.equal(saved[0], race.id);
+  assert.equal(saved[1].title, '수정한 대결');
+  assert.equal(saved[1].startsAt, race.startsAt);
+  assert.equal(saved[1].visibility, race.visibility);
+});
+
+test('권한 안내는 첫 진입에서 위치만 자동 확인하고 설정 재진입에서는 요청하지 않는다', async () => {
+  for (const from of [undefined, 'settings']) {
+    const calls = [];
+    let focus;
+    const h = renderHarness('features/settings/permissions-screen.tsx', {
+      'react-native': {
+        AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
+        Linking: { openSettings() {} }, Platform: { OS: 'ios' },
+        Pressable: 'Pressable', ScrollView: 'ScrollView', View: 'View', StyleSheet: { create: (s) => s },
+      },
+      'expo-router': {
+        useFocusEffect: (fn) => { focus = fn; }, useLocalSearchParams: () => ({ from }),
+        useRouter: () => ({ replace() {}, push() {} }),
+      },
+      'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
+      '@/components/back-header': { BackHeader: 'BackHeader' },
+      '@/components/pace-button': { PaceButton: 'PaceButton' },
+      '@/components/pace-text': { PaceText: 'Text' }, '@/constants/pace': { PaceColors: {} },
+      '@/data/permission-preferences': {}, '@/features/auth/session-store': { useSession: () => ({ session: null }) },
+      '@/lib/api-transport': {},
+      './location-permission': { checkLocationPermission: async (mode) => {
+        calls.push(mode); return { granted: true, canAskAgain: true, status: 'granted' };
+      } },
+    });
+    h.render('PermissionsScreen');
+    const cleanup = focus();
+    await new Promise(setImmediate);
+    assert.deepEqual(calls, [from === 'settings' ? 'never' : 'initial']);
+    cleanup();
+  }
 });

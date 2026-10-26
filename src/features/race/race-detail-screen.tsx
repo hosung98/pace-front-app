@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackHeader } from '@/components/back-header';
@@ -36,6 +36,7 @@ function secondsUntil(target: number, now: number): number {
 }
 
 export function RaceDetailScreen() {
+  const router = useRouter();
   const { raceId } = useLocalSearchParams<{ raceId?: string }>();
   const submitting = useRef(false);
   const now = useNow(1000);
@@ -47,7 +48,7 @@ export function RaceDetailScreen() {
 
   const key = `${raceId}:${version}`;
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!raceId) return;
     let cancelled = false;
     getRaceDetail(raceId)
@@ -61,7 +62,7 @@ export function RaceDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [raceId, key]);
+  }, [raceId, key]));
 
   const runAction = async (action: () => Promise<unknown>) => {
     if (submitting.current) return;
@@ -138,6 +139,8 @@ export function RaceDetailScreen() {
         <Text style={styles.host}>현재 방 생성·참가를 지원합니다. 자동 출발·GPS 결과 등록·순위 산정은 준비 중이에요.</Text>
 
         <View style={styles.actions}>
+          {race.isHost && status === 'recruiting' ? <PaceButton label="대결 정보 수정" variant="secondary" disabled={busy}
+            onPress={() => router.push({ pathname: '/race-edit', params: { raceId: race.id } })} /> : null}
           {canJoinRace(race, now) ? (
             <PaceButton label="참가하기" loading={busy} onPress={() => void runAction(() => joinRace(race.id))} />
           ) : null}

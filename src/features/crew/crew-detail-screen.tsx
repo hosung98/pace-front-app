@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -52,7 +52,7 @@ export function CrewDetailScreen() {
 
   const key = `${crewId}:${period}:${version}`;
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!crewId) return;
     let cancelled = false;
     getCrewDetail(crewId, period)
@@ -67,7 +67,7 @@ export function CrewDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [crewId, period, key]);
+  }, [crewId, period, key]));
 
   const runAction = async (action: () => Promise<unknown>, onSuccess?: () => void) => {
     if (submitting.current) return;
@@ -132,6 +132,8 @@ export function CrewDetailScreen() {
         {detail.membership === 'leader' ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>크루장 관리</Text>
+            <PaceButton label="크루 정보 수정" variant="secondary" disabled={busy}
+              onPress={() => router.push({ pathname: '/crew-edit', params: { crewId: detail.id } })} />
             <View style={styles.codeRow}>
               <View>
                 <Text style={styles.codeLabel}>초대 코드</Text>

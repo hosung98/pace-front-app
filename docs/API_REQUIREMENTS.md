@@ -32,6 +32,8 @@ PACE 앱(Expo/React Native)이 필요로 하는 백엔드 API, DB 테이블, 구
 - 크루장: `POST /crews/{id}/invite-code`, `GET /crews/{id}/join-requests`,
   `POST /crews/{id}/join-requests/{userId}/approve|reject`,
   `POST /crews/{id}/leader` (`{userId}`).
+- 크루 수정: `PATCH /crews/{id}`에 생성과 같은 전체 편집 필드(`name`, `intro`, `region`)를 전송하고
+  `204`를 받습니다. 크루장만 가능하며 시/도 전체(`sigungu: null`)도 지원합니다.
 - 대결: `GET /races?scope=open|mine&distanceMeters=&from=&to=&hideFull=`,
   `GET /races/{id}`, `POST /races` (`{id}`).
 - 참가·취소: `POST /races/{id}/participants`, `DELETE /races/{id}/participants/me`,
@@ -39,6 +41,13 @@ PACE 앱(Expo/React Native)이 필요로 하는 백엔드 API, DB 테이블, 구
 - 대결 생성 필드: `title`, `distanceMeters`, `startsAt`, `joinDeadlineMinutes`,
   `minParticipants`, `maxParticipants`, `visibility`. 참가자 결과는 현재 `null`입니다.
   자동 러닝 시작, GPS 결과 제출·검증, 결과 랭킹은 아직 지원하지 않습니다.
+- 대결 수정: `PATCH /races/{id}`에 생성과 같은 전체 편집 필드를 전송하고 `204`를 받습니다.
+  모집 마감 전·미취소 상태에서 방장만 가능합니다. 다른 참가자가 있으면 이름·최대 인원만 바꿀 수 있으며,
+  최대 인원은 현재 참가 인원보다 줄일 수 없습니다. 서버가 행 잠금 안에서 권한·모집 상태·인원을 재검사합니다.
+  프론트는 기존 시각을 임의로 반올림하지 않고 보존하며 상세 화면으로 돌아오면 다시 조회합니다.
+  **수정 API는 백엔드 배포 후 사용 가능합니다.** 기존 DB는 시/도 전체 지원을 위해
+  백엔드의 `database/crew-region-schema.sql`을 먼저 수동 적용해야 합니다.
+  이 작업에서는 서버 배포나 실제 DB 변경을 실행하지 않습니다.
 - 현재 서버 필드는 `isMine`, `isMe`, `isHost`, `isJoined`를 그대로 사용합니다.
   가입 신청 목록은 `{userId, nickname}[]`입니다.
 - 게스트에게는 로그인 안내, 빈 목록에는 생성 안내, 요청 실패에는 오류와 재시도를 표시합니다.

@@ -36,6 +36,11 @@ export async function createRace(input: CreateRaceInput): Promise<string> {
   })).id;
 }
 
+export const updateRace = (id: string, input: CreateRaceInput) =>
+  api<void>(`/races/${encodeURIComponent(id)}`, {
+    method: 'PATCH', body: JSON.stringify({ ...input, title: input.title.trim(), startsAt: new Date(input.startsAt).toISOString() }),
+  });
+
 export const joinRace = (id: string) =>
   api<void>(`/races/${encodeURIComponent(id)}/participants`, { method: 'POST' });
 export async function joinRaceByCode(code: string): Promise<string> {
