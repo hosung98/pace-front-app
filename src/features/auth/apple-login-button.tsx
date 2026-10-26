@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Platform, View } from 'react-native';
-import * as AppleAuthentication from 'expo-apple-authentication';
+import { Platform } from 'react-native';
 import { isAppleLoginAvailable } from './apple-login';
+import { ProviderLoginButton } from './provider-login-button';
 
-export function AppleLoginButton({ disabled, onPress, onError }: Readonly<{
-  disabled: boolean; onPress: () => void; onError: (error: unknown) => void;
+export function AppleLoginButton({ disabled, loading, onPress, onError }: Readonly<{
+  disabled: boolean; loading: boolean; onPress: () => void; onError: (error: unknown) => void;
 }>) {
   const [available, setAvailable] = useState(false);
   useEffect(() => {
@@ -16,11 +16,5 @@ export function AppleLoginButton({ disabled, onPress, onError }: Readonly<{
     return () => { active = false; };
   }, [onError]);
   if (!available) return null;
-  return <View pointerEvents={disabled ? 'none' : 'auto'} accessibilityState={{ disabled }}>
-    <AppleAuthentication.AppleAuthenticationButton
-      buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-      cornerRadius={12} style={{ width: '100%', height: 44, opacity: disabled ? 0.4 : 1 }}
-      onPress={onPress} />
-  </View>;
+  return <ProviderLoginButton provider="apple" disabled={disabled} loading={loading} onPress={onPress} />;
 }

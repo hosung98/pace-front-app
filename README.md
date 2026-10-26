@@ -15,7 +15,9 @@ APIs rather than sample data; an empty account can create a crew or race room.
   and text area navigate the onboarding. Swipe right to go back; there is no back
   button. Skip goes to page three.
 - 온보딩 완료 여부를 기기에 저장하며, 이후 실행에서는 로그인 상태에 따라 홈 또는 로그인으로 이동합니다.
-  기존 로그인 사용자는 온보딩 완료로 이관합니다. 로그아웃·탈퇴로 이 기기의 온보딩 상태를 초기화하지 않습니다.
+  로그인 세션이 남아 있어도 설치의 완료 기록이 없으면 온보딩을 표시합니다.
+  업데이트·로그아웃·탈퇴로 완료 상태를 초기화하지 않으며, 앱 삭제 후 새 설치는 다시 표시합니다.
+  iOS의 앱 정리하기(데이터 유지)나 백업 복원은 새 설치와 다릅니다.
   저장·조회 실패 시 오류와 재시도를 제공하며, 완료 CTA는 저장 중 중복 입력을 막습니다.
 - 온보딩 다음에는 권한 안내를 한 번 표시합니다. 위치·Apple 건강을 선택하거나 모두 건너뛸 수 있으며,
   이후 iOS·웹 Google 로그인, iOS Apple 로그인 또는 기기 모드를 선택합니다.
@@ -94,7 +96,7 @@ Expo Go, 웹, TypeScript 검사만으로 Apple 로그인·Face ID·HealthKit의 
 
 ### Apple 로그인
 
-- `expo-apple-authentication` 공식 버튼을 iOS에서만 표시합니다.
+- Apple 공식 로그인 로고와 공통 시스템 글꼴을 사용하는 버튼을 iOS에서만 표시합니다.
   Apple 요청의 `state`를 확인하고, 해시 nonce를 Apple에 전달하며 원본 nonce와 서명된 ID 토큰을
   `/auth/apple`로 보냅니다. 서버에서 서명·issuer·audience·만료·nonce를 검증해야 합니다.
 - Apple이 최초 로그인에만 제공하는 이름은 선택 정보입니다. 클라이언트 이메일을 신뢰하거나
@@ -154,12 +156,12 @@ Expo Go, 웹, TypeScript 검사만으로 Apple 로그인·Face ID·HealthKit의 
 - `/permissions`는 기기별 완료 상태를 온보딩과 별도로 저장합니다. 명시적으로 위치 버튼을 누를 때만
   foreground 권한을 요청하고, background 권한은 기존 러닝 시작 흐름에서 처리합니다.
   건너뛰기도 완료로 저장하며 앱 설정에서 언제든 다시 열 수 있습니다. Face ID는 로그인 후 별도 opt-in입니다.
-- 설정 → **온보딩 다시 보기**는 최초 실행 완료 상태를 지우지 않고 소개 화면만 재생합니다.
-  닫기·마지막 CTA는 이전 화면으로 돌아가며 권한 안내·로그인을 다시 강제하지 않습니다.
-- 로그인은 두 소셜 버튼·기기 모드와 최소한의 데이터 안내로 정리했습니다. Apple 공식 버튼은 44pt로
-  낮추고 Google 버튼도 동일 높이 기준으로 맞췄습니다. Apple의 기본 제목 비율(높이의 43%)에 맞춰
-  Google 제목도 시스템 폰트 19pt로 표시합니다. Apple 글자는 운영체제에서 렌더링하므로
-  임의 폰트·변형을 적용하지 않습니다. Google 아이콘은 Google 제공
+- 이용 안내에서 온보딩 다시 보기 링크를 제거했습니다. 온보딩은 설치별 최초 완료 전까지 표시합니다.
+- iOS 로그인 버튼은 공통 컴포넌트로 시스템 글꼴 17pt·보통 굵기, 시각 높이 40pt,
+  터치 높이 48pt를 사용합니다. Apple의 제목 비율(약 43%)에 맞췄으며 공식 SVG의 비율·패딩은 유지합니다.
+  [Apple 공식 로고 자산](https://developer.apple.com/design/resources/)과 동봉 라이선스는
+  `assets/images/apple-login-*`에 보관합니다. 로그인 중에는 해당 제공자에만 진행 표시가 나타나며,
+  두 버튼의 제목은 바뀌지 않고 중복 인증은 차단됩니다. Google 아이콘은 Google 제공
   [로그인 브랜드 자산](https://developers.google.com/identity/branding-guidelines)을 기기에 포함해 네트워크 없이 표시합니다.
 - 권한 안내는 위치·건강 두 행과 주 CTA 하나로 구성하고, 건강의 상세 처리 범위·권한 관리 등
   긴 설명은 펼치기 영역으로 옮겼습니다. 기본 화면에서 설명을 줄여도 동의 전 핵심 데이터 범위는 유지합니다.

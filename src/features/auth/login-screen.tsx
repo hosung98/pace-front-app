@@ -4,12 +4,10 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text as ProviderText,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
 
 import { BackHeader } from '@/components/back-header';
 import { PaceText as Text } from '@/components/pace-text';
@@ -24,11 +22,13 @@ import { GoogleWebButton } from './google-web-button';
 import { acceptSession, useSession, type AuthTokens } from './session-store';
 import { appleCredential } from './apple-login';
 import { AppleLoginButton } from './apple-login-button';
+import { ProviderLoginButton } from './provider-login-button';
 
 export function LoginScreen() {
   const router = useRouter();
   const { session } = useSession();
-  const [busy, setBusy] = useState(false);
+  const [activeProvider, setActiveProvider] = useState<'google' | 'apple' | null>(null);
+  const busy = activeProvider !== null;
   const [failure, setFailure] = useState<string | null>(null);
   const signingIn = useRef(false);
   const appleError = useCallback((error: unknown) => {
@@ -38,7 +38,7 @@ export function LoginScreen() {
   const signIn = async (webIdToken?: string, provider: 'google' | 'apple' = 'google') => {
     if (signingIn.current) return;
     signingIn.current = true;
-    setBusy(true);
+    setActiveProvider(provider);
     try {
       if (await readActiveRun()) throw new Error('러닝을 종료하고 저장한 뒤 로그인해 주세요.');
       if (!session) {
@@ -67,7 +67,7 @@ export function LoginScreen() {
       setFailure(errorMessage(error, '로그인에 실패했어요. 다시 시도해 주세요.'));
     } finally {
       signingIn.current = false;
-      setBusy(false);
+      setActiveProvider(null);
     }
   };
 
@@ -92,29 +92,10 @@ export function LoginScreen() {
             {Platform.OS === 'web' && !session ? (
               <GoogleWebButton disabled={busy} onCredential={(idToken) => { void signIn(idToken); }} />
             ) : (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Google로 계속하기"
-                disabled={busy}
-                accessibilityState={{ disabled: busy }}
-                onPress={() => { void signIn(); }}
-                style={({ pressed }) => [
-                  styles.providerButton,
-                  styles.google,
-                  pressed && styles.pressed,
-                ]}>
-                <Image source={require('@/assets/images/google-logo.png')} style={styles.providerIcon}
-                  contentFit="contain" accessible={false} />
-                <ProviderText
-                  style={[
-                    styles.providerText,
-                    styles.googleText,
-                  ]}>
-                  {busy ? '로그인 중…' : 'Google로 계속하기'}
-                </ProviderText>
-              </Pressable>
+              <ProviderLoginButton provider="google" disabled={busy} loading={activeProvider === 'google'}
+                onPress={() => { void signIn(); }} />
             )}
-            {Platform.OS === 'ios' && !session ? <AppleLoginButton disabled={busy}
+            {Platform.OS === 'ios' && !session ? <AppleLoginButton disabled={busy} loading={activeProvider === 'apple'}
               onPress={() => { void signIn(undefined, 'apple'); }} onError={appleError} /> : null}
           </View>
 
@@ -195,30 +176,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   loginOptions: {
-    gap: 12,
+    gap: 4,
   },
-  providerButton: {
-    minHeight: 44,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  providerText: {
-    fontSize: 19,
-    fontWeight: '400',
-  },
-  providerIcon: { width: 20, height: 20 },
   versionLink: { color: C.subtle, fontSize: 11, textAlign: 'center' },
-  google: {
-    backgroundColor: '#F4F5F0',
-  },
-  googleText: {
-    color: '#202124',
-  },
   legalLinks: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 8 },
   legalLink: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   legalLinkText: { color: C.muted, fontSize: 11 },

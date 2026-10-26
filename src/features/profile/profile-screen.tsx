@@ -110,7 +110,7 @@ function AccountProfile() {
         </View>
       </Pressable>
       <Text style={styles.sectionTitle}>내 메뉴</Text>
-      <View style={tabScreenStyles.card}>
+      <View style={styles.menuCard}>
         {menuItems.filter((item) => !session || item.route !== '/login').map((item, index) => (
           <View key={item.route}>
             {index > 0 ? <View style={tabScreenStyles.divider} /> : null}
@@ -167,7 +167,8 @@ const styles = StyleSheet.create({
   goalActionText: { color: C.accent, fontSize: 10, fontWeight: '600' },
   goalIconText: { color: C.accent, fontSize: 24 },
   sectionTitle: { marginTop: 27, marginBottom: 0, color: C.text, fontSize: 16, fontWeight: '700' },
-  menuRow: { minHeight: 61, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  menuCard: { marginTop: 10, paddingHorizontal: 16, borderRadius: 16, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  menuRow: { minHeight: 64, paddingVertical: 12, gap: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   menuCopy: { flex: 1, gap: 4 },
   menuLabel: { color: C.text, fontSize: 12, fontWeight: '600' },
   menuDetail: { marginTop: 4, color: C.muted, fontSize: 11, lineHeight: 18 },

@@ -125,52 +125,39 @@ test('최초 온보딩은 완료를 저장한 뒤에만 권한 안내로 이동�
   assert.deepEqual(h.calls, ['persist', '/permissions']);
 });
 
-test('Google 버튼은 로컬 공식 아이콘을 포함하고 Apple 버튼은 44pt 공식 컨트롤을 사용한다', () => {
-  const login = source('features/auth/login-screen.tsx');
-  const image = elements(login, 'Image')[0];
-  assert.ok(image);
-  assert.match(image.getText(), /google-logo\.png/);
+test('소셜 버튼은 같은 17pt 시스템 글꼴·40pt 시각 높이·48pt 터치 영역과 로컬 공식 로고를 사용한다', () => {
   const logo = fs.readFileSync(path.join(__dirname, '../assets/images/google-logo.png'));
   assert.equal(logo.subarray(1, 4).toString(), 'PNG');
-  const apple = elements(source('features/auth/apple-login-button.tsx'), 'AppleAuthentication.AppleAuthenticationButton')[0];
-  assert.match(apple.getText(), /height: 44/);
-  assert.equal(elements(login, 'ProviderText').length, 1);
-  assert.match(login.text, /providerText:\s*\{\s*fontSize: 19,/);
+  const appleLogo = fs.readFileSync(path.join(__dirname, '../assets/images/apple-login-logo.svg'), 'utf8');
+  assert.match(appleLogo, /viewBox="0 0 31 44"/);
+  const h = renderHarness('features/auth/provider-login-button.tsx', {
+    'react-native': {
+      ActivityIndicator: 'ActivityIndicator', Pressable: 'Pressable', View: 'View',
+      Text: 'Text', StyleSheet: { create: (styles) => styles },
+    },
+    'expo-image': { Image: 'Image' },
+    '@/assets/images/google-logo.png': 'google-logo',
+    '@/assets/images/apple-login-logo.svg': 'apple-logo',
+  });
+  const titles = [];
+  for (const provider of ['google', 'apple']) {
+    const tree = h.render('ProviderLoginButton', { provider, disabled: true, loading: provider === 'apple' });
+    const nodes = flatten(tree);
+    const title = nodes.find(({ node }) => node.type === 'Text').node;
+    titles.push(title.props.style);
+    assert.equal(title.props.children, `${provider === 'apple' ? 'Apple' : 'Google'}로 계속하기`);
+    assert.equal(nodes.find(({ node }) => node.type === 'Image').node.props.source, `${provider}-logo`);
+    assert.equal(tree.props.style({ pressed: false })[0].minHeight, 48);
+    assert.equal(tree.props.accessibilityState.busy, provider === 'apple');
+    assert.equal(nodes.filter(({ node }) => node.type === 'ActivityIndicator').length, provider === 'apple' ? 1 : 0);
+    assert.equal(nodes.find(({ node }) => node.type === 'View').node.props.style[0].minHeight, 40);
+  }
+  assert.equal(titles[0], titles[1]);
+  assert.equal(titles[0].fontSize, 17);
+  assert.equal(titles[0].fontWeight, '400');
 });
 
-test('iOS 로그인 분기는 로고와 텍스트를 가로 배치하며 Apple은 별도 버튼으로 렌더링한다', () => {
-  const file = source('features/auth/login-screen.tsx');
-  const jsx = (type, props) => ({ type, props });
-  const router = { push() {}, replace() {} };
-  const mocks = {
-    react: { useCallback: (fn) => fn, useRef: (current) => ({ current }), useState: (value) => [value, () => {}] },
-    'react/jsx-runtime': { jsx, jsxs: jsx },
-    'react-native': {
-      Platform: { OS: 'ios' }, Pressable: 'Pressable', ScrollView: 'ScrollView', View: 'View',
-      Text: 'ProviderText', StyleSheet: { create: (styles) => styles },
-    },
-    'expo-router': { useRouter: () => router },
-    'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
-    'expo-image': { Image: 'Image' },
-    '@/components/back-header': { BackHeader: 'BackHeader' },
-    '@/components/pace-text': { PaceText: 'Text' },
-    '@/constants/pace': { PaceColors: {} },
-    '@/components/pace-feedback': { PaceErrorDialog: 'PaceErrorDialog' },
-    '@/constants/api': {}, '@/data/completed-runs-repository': {}, '@/data/active-run-store': {},
-    '@/lib/api-transport': {}, './google-login': {}, './apple-login': {},
-    './google-web-button': { GoogleWebButton: 'GoogleWebButton' },
-    './apple-login-button': { AppleLoginButton: 'AppleLoginButton' },
-    './session-store': { useSession: () => ({ session: null }) },
-    '@/assets/images/google-logo.png': 'bundled-google-logo',
-  };
-  const module = { exports: {} };
-  vm.runInNewContext(ts.transpileModule(file.text, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
-  }).outputText, { module, exports: module.exports, console, require: (name) => {
-    if (!(name in mocks)) throw new Error(`Unexpected import ${name}`);
-    return mocks[name];
-  } });
-  const tree = module.exports.LoginScreen();
+function flatten(tree) {
   const nodes = [];
   const visit = (node, parents = []) => {
     if (!node || typeof node !== 'object') return;
@@ -179,13 +166,155 @@ test('iOS 로그인 분기는 로고와 텍스트를 가로 배치하며 Apple�
     for (const child of Array.isArray(children) ? children : [children]) visit(child, [...parents, node]);
   };
   visit(tree);
-  const google = nodes.find(({ node }) => node.props.accessibilityLabel === 'Google로 계속하기').node;
-  assert.equal(google.props.children[0].type, 'Image');
-  assert.equal(google.props.children[0].props.source, 'bundled-google-logo');
-  assert.equal(google.props.children[1].type, 'ProviderText');
-  assert.equal(google.props.style({ pressed: false })[0].flexDirection, 'row');
+  return nodes;
+}
+
+function renderHarness(file, imports) {
+  const slots = [];
+  let cursor = 0;
+  let effects = [];
+  const jsx = (type, props) => ({ type, props });
+  const slot = (initial) => {
+    const index = cursor++;
+    if (!(index in slots)) slots[index] = initial;
+    return [slots[index], (value) => {
+      slots[index] = typeof value === 'function' ? value(slots[index]) : value;
+    }];
+  };
+  const mocks = {
+    react: {
+      useState: slot, useRef: (current) => slot({ current })[0], useCallback: (fn) => fn,
+      useEffect: (fn, deps) => {
+        const index = cursor++;
+        const prior = slots[index];
+        if (!prior || deps.some((dep, i) => dep !== prior[i])) effects.push(fn);
+        slots[index] = deps;
+      },
+    },
+    'react/jsx-runtime': { jsx, jsxs: jsx },
+    ...imports,
+  };
+  const module = { exports: {} };
+  vm.runInNewContext(ts.transpileModule(source(file).text, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText, { module, exports: module.exports, console: { ...console, error() {} }, require: (name) => {
+    if (!(name in mocks)) throw new Error(`Unexpected import ${name}`);
+    return mocks[name];
+  } });
+  return { render: (name, props) => {
+    cursor = 0;
+    const tree = module.exports[name](props);
+    const pending = effects;
+    effects = [];
+    pending.forEach((fn) => fn());
+    return tree;
+  } };
+}
+
+function loginHarness(overrides = {}) {
+  return renderHarness('features/auth/login-screen.tsx', {
+    'react-native': {
+      Platform: { OS: 'ios' }, Pressable: 'Pressable', ScrollView: 'ScrollView', View: 'View',
+      StyleSheet: { create: (styles) => styles },
+    },
+    'expo-router': { useRouter: () => ({ push() {}, replace() {} }) },
+    'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
+    '@/components/back-header': { BackHeader: 'BackHeader' },
+    '@/components/pace-text': { PaceText: 'Text' },
+    '@/constants/pace': { PaceColors: {} },
+    '@/components/pace-feedback': { PaceErrorDialog: 'PaceErrorDialog' },
+    '@/constants/api': {}, '@/data/completed-runs-repository': {},
+    '@/data/active-run-store': { readActiveRun: async () => null },
+    '@/lib/api-transport': {}, './google-login': {}, './apple-login': {},
+    './google-web-button': { GoogleWebButton: 'GoogleWebButton' },
+    './apple-login-button': { AppleLoginButton: 'AppleLoginButton' },
+    './provider-login-button': { ProviderLoginButton: 'ProviderLoginButton' },
+    './session-store': { useSession: () => ({ session: null }) },
+    ...overrides,
+  });
+}
+
+test('iOS 로그인은 공통 Google 버튼과 별도 Apple 버튼을 렌더링하고 헤더를 스크롤 밖에 둔다', () => {
+  const nodes = flatten(loginHarness().render('LoginScreen'));
+  const google = nodes.find(({ node }) => node.type === 'ProviderLoginButton').node;
+  assert.equal(google.props.provider, 'google');
   const apple = nodes.find(({ node }) => node.type === 'AppleLoginButton');
   assert.equal(apple.parents.includes(google), false);
   const header = nodes.find(({ node }) => node.type === 'BackHeader');
   assert.equal(header.parents.some((node) => node.type === 'ScrollView'), false);
+});
+
+test('Apple 인증 중 Google은 로딩하지 않고 중복 요청을 차단하며 취소·실패 후 해제한다', async () => {
+  let resolveApple;
+  let rejectGoogle;
+  let appleCalls = 0;
+  let googleCalls = 0;
+  const h = loginHarness({
+    './apple-login': { appleCredential: () => { appleCalls++; return new Promise((resolve) => { resolveApple = resolve; }); } },
+    './google-login': { googleIdToken: () => { googleCalls++; return new Promise((_, reject) => { rejectGoogle = reject; }); } },
+    '@/lib/api-transport': { errorMessage: (error) => error.message },
+  });
+  const buttons = () => {
+    const nodes = flatten(h.render('LoginScreen'));
+    return {
+      apple: nodes.find(({ node }) => node.type === 'AppleLoginButton').node.props,
+      google: nodes.find(({ node }) => node.type === 'ProviderLoginButton').node.props,
+      error: nodes.find(({ node }) => node.type === 'PaceErrorDialog').node.props.message,
+    };
+  };
+  buttons().apple.onPress();
+  await new Promise(setImmediate);
+  assert.equal(buttons().apple.loading, true);
+  assert.equal(buttons().google.loading, false);
+  assert.equal(buttons().google.disabled, true);
+  buttons().apple.onPress();
+  buttons().google.onPress();
+  assert.equal(appleCalls, 1);
+  assert.equal(googleCalls, 0);
+  resolveApple(null);
+  await new Promise(setImmediate);
+  assert.equal(buttons().apple.disabled, false);
+  buttons().google.onPress();
+  await new Promise(setImmediate);
+  assert.equal(buttons().google.loading, true);
+  assert.equal(buttons().apple.loading, false);
+  rejectGoogle(new Error('인증 실패'));
+  await new Promise(setImmediate);
+  assert.equal(buttons().google.disabled, false);
+  assert.equal(buttons().error, '인증 실패');
+});
+
+test('설치의 온보딩 기록이 없으면 기존 로그인과 관계없이 권한보다 온보딩을 먼저 표시한다', async () => {
+  for (const session of [null, { user: { id: 'restored-user' } }]) {
+    for (const completed of [false, true]) {
+      for (const seen of [false, true]) {
+        const h = renderHarness('app/index.tsx', {
+          'expo-router': { Redirect: 'Redirect' },
+          'react-native': { View: 'View' },
+          '@/features/onboarding/onboarding-screen': { OnboardingScreen: 'OnboardingScreen' },
+          '@/features/onboarding/pace-splash': { PaceSplash: 'PaceSplash' },
+          '@/data/onboarding-repository': { hasCompletedOnboarding: async () => completed },
+          '@/features/auth/session-store': { useSession: () => ({ session }) },
+          '@/components/pace-feedback': { PaceQueryState: 'PaceQueryState' },
+          '@/data/permission-preferences': { hasSeenPermissionIntro: async () => seen },
+        });
+        h.render('default').props.onFinish();
+        await new Promise(setImmediate);
+        const tree = h.render('default');
+        assert.equal(tree.type, completed ? 'Redirect' : 'OnboardingScreen');
+        if (completed) assert.equal(tree.props.href, !seen ? '/permissions' : session ? '/main' : '/login');
+      }
+    }
+  }
+});
+
+test('설정 이용 안내에는 온보딩 링크가 없고 내 메뉴는 별도의 압축 카드로 렌더링한다', () => {
+  const settings = source('features/settings/settings-screen.tsx');
+  assert.doesNotMatch(settings.text, /온보딩 다시 보기|['"]\/onboarding['"]/);
+  const profile = source('features/profile/profile-screen.tsx');
+  const menu = elements(profile, 'View').find((node) => node.openingElement.attributes.getText().includes('styles.menuCard'));
+  assert.ok(menu);
+  assert.match(menu.getText(), /menuItems\.filter/);
+  assert.match(profile.text, /menuCard: \{[^}]*paddingHorizontal: 16/);
+  assert.doesNotMatch(profile.text.match(/menuCard: \{([^}]*)/)[1], /\bpadding:|paddingVertical:/);
 });

@@ -74,12 +74,10 @@ function AccountSettings() {
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <View style={styles.fixedContent}>
         <BackHeader backLabel="마이 화면으로 돌아가기" />
-        <Text style={styles.eyebrow}>PREFERENCES</Text>
-        <Text style={styles.title}>앱 설정</Text>
-        <Text style={styles.description}>PACE를 나에게 맞게 설정해 보세요.</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={styles.title}>앱 설정</Text>
         <Text style={styles.sectionTitle}>보안 · 건강 연동</Text>
         <View style={styles.card}>
           <SettingSwitch title="Face ID · 기기 암호로 앱 잠금"
@@ -109,16 +107,17 @@ function AccountSettings() {
         <View style={styles.card}>
           {([
             ['/permissions', '앱 권한 안내'],
-            ['/onboarding', '온보딩 다시 보기'],
             ['/privacy', '개인정보 처리방침'],
             ['/terms', '이용약관'],
             ['/support', '도움말 · 문의 및 삭제 요청'],
             ['/app-update', '앱 정보 · 업데이트'],
-          ] as const).map(([route, label]) => <Pressable key={route} accessibilityRole="link"
-            style={styles.actionRow} onPress={() => router.push(route === '/permissions'
+          ] as const).map(([route, label], index) => <View key={route}>
+            {index > 0 ? <View style={styles.divider} /> : null}
+            <Pressable accessibilityRole="link"
+            style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]} onPress={() => router.push(route === '/permissions'
               ? { pathname: route, params: { from: 'settings' } } : route)}>
             <Text style={styles.settingTitle}>{label}</Text><Text style={styles.chevron}>›</Text>
-          </Pressable>)}
+          </Pressable></View>)}
         </View>
         {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}
         {session && (isLoading || errorMessage) ? (
@@ -231,11 +230,13 @@ function SettingSwitch({
       <Pressable
         accessibilityRole="switch"
         accessibilityLabel={title}
-        accessibilityState={{ checked: value }}
+        accessibilityState={{ checked: value, disabled }}
         disabled={disabled}
         onPress={() => onValueChange(!value)}
-        style={[styles.switchTrack, value && styles.switchTrackActive]}>
-        <View style={[styles.switchThumb, value && styles.switchThumbActive]} />
+        style={[styles.switchTarget, disabled && styles.disabled]}>
+        <View style={[styles.switchTrack, value && styles.switchTrackActive]}>
+          <View style={[styles.switchThumb, value && styles.switchThumbActive]} />
+        </View>
       </Pressable>
     </View>
   );
@@ -245,17 +246,17 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.background },
   fixedContent: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24 },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 28 },
-  eyebrow: { marginTop: 23, color: C.accent, fontSize: 9, fontWeight: '600', letterSpacing: 2 },
-  title: { marginTop: 8, color: C.text, fontSize: 25, fontWeight: '700' },
-  description: { marginTop: 5, color: C.muted, fontSize: 12 },
-  sectionTitle: { marginTop: 24, marginBottom: 10, color: C.text, fontSize: 14, fontWeight: '700' },
+  title: { marginTop: 12, color: C.text, fontSize: 25, fontWeight: '700' },
+  sectionTitle: { marginTop: 20, marginBottom: 8, color: C.text, fontSize: 14, fontWeight: '700' },
   card: { paddingHorizontal: 15, borderRadius: 18, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   deleteConfirmation: { paddingVertical: 18, marginTop: 14, gap: 14 },
-  settingRow: { minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
-  settingCopy: { flex: 1, gap: 5 },
-  settingTitle: { color: C.text, fontSize: 14, fontWeight: '600' },
+  settingRow: { minHeight: 64, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  settingCopy: { flex: 1, gap: 4 },
+  settingTitle: { color: C.text, fontSize: 14, fontWeight: '600', flexShrink: 1 },
   settingDetail: { color: C.muted, fontSize: 12, lineHeight: 18 },
   switchTrack: { width: 46, height: 28, padding: 3, flexShrink: 0, justifyContent: 'center', borderRadius: 14, backgroundColor: C.raised },
+  switchTarget: { width: 46, minHeight: 44, justifyContent: 'center', flexShrink: 0 },
+  disabled: { opacity: 0.45 },
   switchTrackActive: { backgroundColor: '#718A35' },
   switchThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#D0D2CC', transform: [{ translateX: 0 }] },
   switchThumbActive: { backgroundColor: C.accent, transform: [{ translateX: 18 }] },
@@ -270,8 +271,8 @@ const styles = StyleSheet.create({
   unitText: { color: C.muted, fontSize: 11 },
   unitTextActive: { color: C.accent, fontWeight: '600' },
   unitCode: { color: C.subtle, fontSize: 10, textTransform: 'uppercase' },
-  actionRow: { minHeight: 66, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  actionCopy: { flex: 1, gap: 5, paddingVertical: 14, paddingRight: 12 },
+  actionRow: { minHeight: 50, paddingVertical: 10, gap: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  actionCopy: { flex: 1, gap: 4, paddingRight: 4 },
   chevron: { color: C.subtle, fontSize: 22 },
   message: { marginTop: 10, color: C.muted, fontSize: 10, lineHeight: 16 },
   note: { marginTop: 19, color: C.subtle, fontSize: 9, lineHeight: 15, textAlign: 'center' },
