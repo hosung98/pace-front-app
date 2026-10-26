@@ -55,12 +55,13 @@ export function HealthScreen() {
   const data = query.data;
   const canDisconnect = data?.connected || query.errorMessage;
   return <SafeAreaView style={styles.screen}>
-    <ScrollView contentContainerStyle={styles.content}>
-      <BackHeader />
+    <View style={styles.header}><BackHeader />
       <View style={styles.intro}>
         <Text style={styles.title}>Apple 건강</Text>
         <Text style={styles.description}>러닝과 건강 기록을 한곳에서.</Text>
       </View>
+    </View>
+    <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.card}>
         <Text style={styles.status}>{data?.connected ? '연동 사용 중' : '선택 연동'}</Text>
         <Text style={styles.heading}>오늘의 걸음과 최근 운동</Text>
@@ -111,8 +112,9 @@ export function HealthScreen() {
 }
 
 const styles = StyleSheet.create({
+  header: { paddingHorizontal: 24, width: '100%', maxWidth: 560, alignSelf: 'center' },
   screen: { flex: 1, backgroundColor: C.background },
-  content: { width: '100%', maxWidth: 560, alignSelf: 'center', padding: 24, gap: 18, paddingBottom: 40 },
+  content: { width: '100%', maxWidth: 560, alignSelf: 'center', padding: 24, paddingTop: 12, gap: 18, paddingBottom: 40 },
   title: { color: C.text, fontSize: 24, fontWeight: '700' },
   intro: { gap: 10, paddingTop: 12, paddingBottom: 6 },
   status: { color: C.accent, fontSize: 11, fontWeight: '600', marginBottom: 4 },

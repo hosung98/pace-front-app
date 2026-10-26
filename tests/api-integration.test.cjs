@@ -88,6 +88,49 @@ async function harness() {
   return h;
 }
 
+test('러닝 성취·대표 배지·회고·크루 목표는 실제 계약과 인증으로 요청한다', async () => {
+  const h = await harness();
+  await h.session.acceptSession(tokens());
+  const repository = h.load('data/running-progress-repository');
+  const requests = [];
+  h.fetch = async (url, options) => {
+    requests.push({ url, method: options.method ?? 'GET', body: options.body ? JSON.parse(options.body) : null });
+    assert.ok(options.headers.Authorization);
+    if (url.endsWith('/users/me/progress')) return json({ totalRuns: 1, badges: [] });
+    if (url.endsWith('/reflection') && !options.method) return json({ effort: null, note: '' });
+    if (url.endsWith('/goal') && !options.method) return json({ month: '2026-10', targetKm: 200, totalKm: 10, contributors: [] });
+    return new Response(null, { status: 204 });
+  };
+  assert.equal((await repository.getRunningProgress()).totalRuns, 1);
+  await repository.setRepresentativeBadge('first-run');
+  await repository.getRunReflection('run/one');
+  await repository.saveRunReflection('run/one', { effort: 'easy', note: '좋은 러닝' });
+  await repository.getCrewGoal('crew/one');
+  await repository.saveCrewGoal('crew/one', 200);
+  assert.deepEqual(requests.map(r => [new URL(r.url).pathname.split('/api/v1').at(-1), r.method]), [
+    ['/users/me/progress', 'GET'],
+    ['/users/me/progress/representative-badge', 'PUT'],
+    ['/runs/run%2Fone/reflection', 'GET'],
+    ['/runs/run%2Fone/reflection', 'PUT'],
+    ['/crews/crew%2Fone/goal', 'GET'],
+    ['/crews/crew%2Fone/goal', 'PUT'],
+  ]);
+  assert.equal(requests[1].body.badgeId, 'first-run');
+  assert.equal(requests[3].body.note, '좋은 러닝');
+  assert.equal(requests[5].body.targetKm, 200);
+});
+
+test('성취 API 실패를 빈 컬렉션이나 저장 성공으로 바꾸지 않는다', async () => {
+  const h = await harness();
+  await h.session.acceptSession(tokens());
+  h.fetch = async () => json({ code: 'UNAVAILABLE', message: '서버를 업데이트 중이에요.' }, 503);
+  const repository = h.load('data/running-progress-repository');
+  await assert.rejects(repository.getRunningProgress(), /서버를 업데이트 중/);
+  await assert.rejects(repository.setRepresentativeBadge('first-run'), /서버를 업데이트 중/);
+  await assert.rejects(repository.saveRunReflection('run', { effort: 'hard', note: '' }), /서버를 업데이트 중/);
+  await assert.rejects(repository.saveCrewGoal('crew', 200), /서버를 업데이트 중/);
+});
+
 test('네트워크 실패 문구는 환경 정보를 노출하지 않고 서버 오류 메시지는 유지한다', async () => {
   const h = await harness();
   const { requestJson } = h.load('lib/api-transport');

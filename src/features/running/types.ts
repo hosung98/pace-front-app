@@ -10,6 +10,8 @@ export type RunPoint = {
 
 /** A run in progress. Elapsed time = elapsedBeforeSegmentMs + (now - segmentStartedAt) while running. */
 export type ActiveRun = {
+  goal?: RunGoal;
+  voiceGuidance?: boolean;
   ownerId?: string | null;
   id: string;
   status: 'running' | 'paused';
@@ -20,6 +22,8 @@ export type ActiveRun = {
   currentSpeedMetersPerSecond: number;
   routePoints: RunPoint[];
 };
+
+export type RunGoal = { kind: 'distance' | 'duration'; target: number } | null;
 
 /** A finished run. Mirrors the `POST /runs` payload in docs/API_REQUIREMENTS.md. */
 export type CompletedRun = {

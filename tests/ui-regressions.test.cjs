@@ -42,6 +42,31 @@ test('설정의 도움말·법적 링크는 건강 버튼과 별도의 터치 �
   }
 });
 
+test('모든 하위 화면의 뒤로가기 헤더는 스크롤 영역 밖에 있다', () => {
+  const root = path.join(__dirname, '../src/features');
+  const files = fs.readdirSync(root, { recursive: true }).filter((file) => file.endsWith('.tsx'));
+  let checked = 0;
+  for (const file of files) {
+    for (const header of elements(source(`features/${file}`), 'BackHeader')) {
+      assert.equal(ancestors(header).includes('ScrollView'), false, file);
+      checked++;
+    }
+  }
+  assert.ok(checked >= 20);
+});
+
+test('러닝 시작·정지·종료는 스크롤 밖의 하단 안전 영역에 고정한다', () => {
+  const file = source('features/running/run-tracking-screen.tsx');
+  const controls = elements(file, 'RunControls');
+  assert.equal(controls.length, 1);
+  assert.equal(ancestors(controls[0]).includes('ScrollView'), false);
+  assert.ok(ancestors(controls[0]).includes('SafeAreaView'));
+  const ready = elements(file, 'RunReadyView');
+  assert.equal(ready.length, 1);
+  assert.ok(ancestors(ready[0]).includes('ScrollView'));
+  assert.equal(elements(source('features/running/run-ready-view.tsx'), 'PulseRing').length, 0);
+});
+
 test('건강·Apple 재인증은 RN 확인 모달을 닫으며 동시에 호출하지 않는다', () => {
   for (const file of ['features/health/health-screen.tsx', 'features/settings/settings-screen.tsx']) {
     const screen = source(file);
@@ -50,14 +75,36 @@ test('건강·Apple 재인증은 RN 확인 모달을 닫으며 동시에 호출�
   }
 });
 
-test('탭 제목은 콘텐츠와 함께 스크롤하고 브랜드만 고정된다', () => {
+test('탭의 브랜드·제목·설명은 함께 고정되고 본문만 스크롤한다', () => {
   const file = source('features/navigation/tab-screen-shell.tsx');
   const texts = elements(file, 'Text');
   const title = texts.find((node) => node.children.some((child) =>
     ts.isJsxExpression(child) && child.expression?.getText() === 'title'));
   assert.ok(title);
-  assert.ok(ancestors(title).includes('ScrollView'));
+  assert.equal(ancestors(title).includes('ScrollView'), false);
+  for (const name of ['eyebrow', 'description']) {
+    const text = texts.find((node) => node.children.some((child) =>
+      ts.isJsxExpression(child) && child.expression?.getText() === name));
+    assert.ok(text);
+    assert.equal(ancestors(text).includes('ScrollView'), false);
+  }
   assert.equal(ancestors(elements(file, 'PaceBrand')[0]).includes('ScrollView'), false);
+});
+
+test('목록·상세·설정·러닝 화면의 페이지 제목은 스크롤 영역 밖에 있다', () => {
+  const screens = [
+    'crew/crew-create', 'crew/crew-detail', 'crew/crew-search',
+    'race/race-create', 'race/race-detail', 'race/race-search',
+    'profile/profile-edit', 'profile/weekly-goal', 'health/health',
+    'settings/settings', 'settings/permissions', 'settings/app-update',
+    'legal/legal', 'running/achievements', 'running/run-tracking',
+  ];
+  for (const screen of screens) {
+    const titles = elements(source(`features/${screen}-screen.tsx`), 'Text')
+      .filter(node => node.openingElement.attributes.getText().includes('styles.title'));
+    assert.ok(titles.length, screen);
+    for (const title of titles) assert.equal(ancestors(title).includes('ScrollView'), false, screen);
+  }
 });
 
 function onboardingHarness(replay, canGoBack = true) {
@@ -125,7 +172,7 @@ test('최초 온보딩은 완료를 저장한 뒤에만 권한 안내로 이동�
   assert.deepEqual(h.calls, ['persist', '/permissions']);
 });
 
-test('소셜 버튼은 같은 18pt 반굵은 시스템 글꼴·44pt 시각 높이·52pt 터치 영역과 로컬 공식 로고를 사용한다', () => {
+test('소셜 버튼은 문구 없는 56pt 원형·공식 로고·접근성 이름과 개별 로딩을 사용한다', () => {
   const logo = fs.readFileSync(path.join(__dirname, '../assets/images/google-logo.png'));
   assert.equal(logo.subarray(1, 4).toString(), 'PNG');
   const appleLogo = fs.readFileSync(path.join(__dirname, '../assets/images/apple-login-logo.svg'), 'utf8');
@@ -139,22 +186,22 @@ test('소셜 버튼은 같은 18pt 반굵은 시스템 글꼴·44pt 시각 높�
     '@/assets/images/google-logo.png': 'google-logo',
     '@/assets/images/apple-login-logo.svg': 'apple-logo',
   });
-  const titles = [];
   for (const provider of ['google', 'apple']) {
-    const tree = h.render('ProviderLoginButton', { provider, disabled: true, loading: provider === 'apple' });
+    const tree = h.render('ProviderLoginButton', { provider, disabled: false, loading: false });
     const nodes = flatten(tree);
-    const title = nodes.find(({ node }) => node.type === 'Text').node;
-    titles.push(title.props.style);
-    assert.equal(title.props.children, `${provider === 'apple' ? 'Apple' : 'Google'}로 계속하기`);
+    assert.equal(nodes.filter(({ node }) => node.type === 'Text').length, 0);
+    assert.equal(tree.props.accessibilityLabel, `${provider === 'apple' ? 'Apple' : 'Google'}로 계속하기`);
     assert.equal(nodes.find(({ node }) => node.type === 'Image').node.props.source, `${provider}-logo`);
-    assert.equal(tree.props.style({ pressed: false })[0].minHeight, 52);
-    assert.equal(tree.props.accessibilityState.busy, provider === 'apple');
-    assert.equal(nodes.filter(({ node }) => node.type === 'ActivityIndicator').length, provider === 'apple' ? 1 : 0);
-    assert.equal(nodes.find(({ node }) => node.type === 'View').node.props.style[0].minHeight, 44);
+    const target = tree.props.style({ pressed: false })[0];
+    assert.equal(target.width, 56);
+    assert.equal(target.height, 56);
+    assert.equal(target.borderRadius, 28);
+    const loading = h.render('ProviderLoginButton', { provider, disabled: true, loading: true });
+    assert.equal(loading.props.disabled, true);
+    assert.equal(loading.props.accessibilityState.busy, true);
+    assert.equal(flatten(loading).filter(({ node }) => node.type === 'ActivityIndicator').length, 1);
+    assert.equal(flatten(loading).filter(({ node }) => node.type === 'Image').length, 0);
   }
-  assert.equal(titles[0], titles[1]);
-  assert.equal(titles[0].fontSize, 18);
-  assert.equal(titles[0].fontWeight, '600');
 });
 
 function flatten(tree) {
@@ -171,6 +218,7 @@ function flatten(tree) {
 
 function renderHarness(file, imports) {
   const slots = [];
+  const cleanups = new Map();
   let cursor = 0;
   let effects = [];
   const jsx = (type, props) => ({ type, props });
@@ -184,10 +232,15 @@ function renderHarness(file, imports) {
   const mocks = {
     react: {
       useState: slot, useRef: (current) => slot({ current })[0], useCallback: (fn) => fn,
+      useMemo: (compute) => compute(),
+      useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
       useEffect: (fn, deps) => {
         const index = cursor++;
         const prior = slots[index];
-        if (!prior || deps.some((dep, i) => dep !== prior[i])) effects.push(fn);
+        if (!prior || deps.some((dep, i) => dep !== prior[i])) effects.push(() => {
+          cleanups.get(index)?.();
+          cleanups.set(index, fn());
+        });
         slots[index] = deps;
       },
     },
@@ -197,11 +250,16 @@ function renderHarness(file, imports) {
   const module = { exports: {} };
   vm.runInNewContext(ts.transpileModule(source(file).text, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
-  }).outputText, { module, exports: module.exports, console: { ...console, error() {} }, require: (name) => {
+  }).outputText, { module, exports: module.exports, setInterval: () => 0, clearInterval() {},
+    requestAnimationFrame: (callback) => { callback(); return 0; }, cancelAnimationFrame() {},
+    console: { ...console, error() {} }, require: (name) => {
     if (!(name in mocks)) throw new Error(`Unexpected import ${name}`);
     return mocks[name];
   } });
-  return { render: (name, props) => {
+  return { unmount: () => {
+    cleanups.forEach((cleanup) => cleanup?.());
+    cleanups.clear();
+  }, render: (name, props) => {
     cursor = 0;
     const tree = module.exports[name](props);
     const pending = effects;
@@ -210,6 +268,218 @@ function renderHarness(file, imports) {
     return tree;
   } };
 }
+
+test('러닝 목표를 진행 기록에 보관하고 저장 실패는 기록을 유지하며 성공 후에만 완료 화면으로 간다', async () => {
+  let snapshot = { run: null, loaded: true, error: null };
+  let fail = true;
+  let stopped = 0;
+  let savedOwner;
+  const finished = { id: 'run', startedAt: 0, endedAt: 1000, distanceMeters: 1000, durationSeconds: 300, routePoints: [] };
+  const h = renderHarness('features/running/run-tracking-screen.tsx', {
+    'react-native': { AppState: { currentState: 'active' }, Pressable: 'Pressable', ScrollView: 'ScrollView', View: 'View',
+      StyleSheet: { create: (s) => s } },
+    'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
+    '@/components/back-header': { BackHeader: 'BackHeader' },
+    '@/components/pace-feedback': { PaceErrorDialog: 'PaceErrorDialog' },
+    '@/components/pace-text': { PaceText: 'Text' }, '@/constants/pace': { PaceColors: {} },
+    '@/data/active-run-store': {
+      subscribeToActiveRun() {}, getActiveRunSnapshot: () => snapshot,
+      refreshActiveRunSnapshot: async () => {},
+      writeActiveRun: async (run) => { snapshot = { ...snapshot, run }; },
+      clearActiveRun: async () => { snapshot = { ...snapshot, run: null }; },
+    },
+    '@/data/completed-runs-repository': { saveCompletedRun: async (_run, owner) => {
+      savedOwner = owner;
+      if (fail) throw new Error('disk full');
+      return { synced: true, message: 'saved' };
+    } },
+    '@/features/auth/session-store': { getSessionState: () => ({ session: { user: { id: 'alice' } } }) },
+    '@/features/health/health-service': { exportHealthRun: async () => {} },
+    '@/lib/format': { formatDuration: () => '', formatKm: () => '', formatPace: () => '' },
+    './location-tracking': { checkTrackingReadiness: async () => null, startLocationTracking: async () => {},
+      stopLocationTracking: async () => { stopped++; }, getLocationFailureMessage: (_error, text) => text },
+    './run-ready-view': { RunReadyView: 'RunReadyView' }, './run-options': { RunOptions: 'RunOptions' },
+    './run-goals': { runGoalProgress: () => null }, './use-run-guidance': { useRunGuidance: () => null },
+    './run-completion': { RunCompletion: 'RunCompletion' },
+    './run-session': {
+      createActiveRun: () => ({ id: 'run', status: 'running', startedAt: 0, routePoints: [], distanceMeters: 1000 }),
+      getCurrentPaceSecondsPerKm: () => 300, getElapsedMilliseconds: () => 300_000,
+      pauseActiveRun: (run) => ({ ...run, status: 'paused' }), resumeActiveRun: (run) => ({ ...run, status: 'running' }),
+      toCompletedRun: () => finished,
+    },
+  });
+  let nodes = flatten(h.render('RunTrackingScreen'));
+  const options = nodes.find(({ node }) => node.type === 'RunOptions').node;
+  options.props.onGoal({ kind: 'distance', target: 5000 });
+  options.props.onVoice(true);
+  nodes = flatten(h.render('RunTrackingScreen'));
+  await nodes.find(({ node }) => typeof node.type === 'function' && node.type.name === 'ActionButton').node.props.onPress();
+  assert.equal(snapshot.run.goal.target, 5000);
+  assert.equal(snapshot.run.voiceGuidance, true);
+  nodes = flatten(h.render('RunTrackingScreen'));
+  let controls = nodes.find(({ node }) => typeof node.type === 'function' && node.type.name === 'RunControls').node;
+  controls.props.onConfirm();
+  controls = flatten(h.render('RunTrackingScreen')).find(({ node }) => typeof node.type === 'function' && node.type.name === 'RunControls').node;
+  assert.equal(controls.props.confirming, true);
+  await controls.props.onFinish();
+  assert.ok(snapshot.run);
+  assert.equal(flatten(h.render('RunTrackingScreen')).some(({ node }) => node.type === 'RunCompletion'), false);
+  fail = false;
+  controls = flatten(h.render('RunTrackingScreen')).find(({ node }) => typeof node.type === 'function' && node.type.name === 'RunControls').node;
+  await controls.props.onFinish();
+  assert.equal(snapshot.run, null);
+  assert.equal(savedOwner, 'alice');
+  assert.equal(stopped, 2);
+  assert.equal(flatten(h.render('RunTrackingScreen')).find(({ node }) => node.type === 'RunCompletion').node.props.run.id, 'run');
+});
+
+test('완료 화면은 해당 러닝에서 획득한 배지만 공유 카드에 넘긴다', () => {
+  const pushed = [];
+  const h = renderHarness('features/running/run-completion.tsx', {
+    'react-native': { ScrollView: 'ScrollView', View: 'View', StyleSheet: { create: s => s } },
+    'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
+    'expo-router': { useRouter: () => ({ replace: route => pushed.push(route), push() {} }) },
+    '@/components/back-header': { BackHeader: 'BackHeader' },
+    '@/components/pace-text': { PaceText: 'Text' }, '@/components/pace-button': { PaceButton: 'PaceButton' },
+    '@/components/pace-feedback': { PaceQueryState: 'PaceQueryState' }, '@/constants/pace': { PaceColors: {} },
+    '@/data/running-progress-repository': { getRunningProgress() {} },
+    '@/hooks/use-focus-query': { useFocusQuery: () => ({ isLoading: false, data: {
+      weeklyDistanceKm: 5, weeklyGoalKm: 20, badges: [
+        { id: 'old', title: '이전 배지', earnedAt: '2026-10-20T00:00:00Z' },
+        { id: 'new', title: '첫 5K', earnedAt: '2026-10-26T01:30:00Z' },
+        { id: 'locked', title: '첫 10K', earnedAt: null },
+      ],
+    } }) },
+    '@/lib/format': { formatDuration: () => '30:00', formatKm: () => '5.00' },
+    '@/features/runs/run-share-card': { RunShareCard: 'RunShareCard' },
+    './personal-records': { recordsEarnedByRun: () => [] },
+    './personal-record-celebration': { PersonalRecordCelebration: 'PersonalRecordCelebration' },
+    './badge-emblem': { BadgeEmblem: 'BadgeEmblem' },
+  });
+
+  test('PACE 배지 10종은 동일한 도형을 재사용하며 미획득은 회색으로 표시한다', () => {
+    const h = renderHarness('features/running/badge-emblem.tsx', {
+      'react-native': { View: 'View', StyleSheet: { create: s => s } },
+      '@/components/pace-icon': { PaceIcon: 'PaceIcon' },
+      '@/components/pace-text': { PaceText: 'Text' },
+    });
+    const ids = ['first-run', 'single3k', 'single5k', 'single10k', 'total30k', 'total100k',
+      'total300k', 'weekly3days', 'monthly10runs', 'crew-goal'];
+    const colors = new Set();
+    for (const id of ids) {
+      const earned = flatten(h.render('BadgeEmblem', { id, earned: true }));
+      const locked = flatten(h.render('BadgeEmblem', { id, earned: false }));
+      const border = nodes => nodes.find(({ node }) => Array.isArray(node.props.style)
+        && node.props.style[1]?.borderColor).node.props.style[1].borderColor;
+      colors.add(border(earned));
+      assert.equal(border(locked), '#757A83');
+      assert.equal(earned[0].node.props.importantForAccessibility, 'no-hide-descendants');
+    }
+    assert.equal(colors.size, ids.length);
+    const unknown = flatten(h.render('BadgeEmblem', { id: 'future-badge', earned: true }));
+    assert.ok(unknown.some(({ node }) => node.props.children === 'PACE ACHIEVEMENT'));
+  });
+  const nodes = flatten(h.render('RunCompletion', { run: {
+    id: 'local-id', startedAt: Date.parse('2026-10-26T01:00:00Z'), endedAt: Date.parse('2026-10-26T01:30:00Z'),
+    durationSeconds: 1800, distanceMeters: 5000,
+  }, message: 'saved', onDone() {} }));
+  const card = nodes.find(({ node }) => node.type === 'RunShareCard').node;
+  assert.deepEqual(Array.from(card.props.badgeTitles), ['첫 5K']);
+  nodes.find(({ node }) => node.props?.label === '컨디션 기록 · 러닝 상세').node.props.onPress();
+  assert.equal(pushed[0].pathname, '/run-detail');
+  assert.equal(pushed[0].params.runId, 'local-id');
+});
+
+test('러닝 공유 카드는 레이아웃 뒤 이미지를 자동 생성하고 프라이버시 변경 시 다시 생성한다', async () => {
+  const calls = [];
+  let next = 0;
+  let fail = false;
+  let defer = false;
+  let finishCapture;
+  const h = renderHarness('features/runs/run-share-card.tsx', {
+    'react-native': { Platform: { OS: 'ios' }, Switch: 'Switch', View: 'View', StyleSheet: { create: s => s } },
+    '@/components/pace-text': { PaceText: 'Text' }, '@/components/pace-brand': { PaceBrand: 'PaceBrand' },
+    '@/components/pace-button': { PaceButton: 'PaceButton' }, '@/constants/pace': { PaceColors: {} },
+    '@/lib/format': { formatDuration: () => '30:00', formatKm: () => '5.00', formatPace: () => '6:00' },
+    '@/lib/api-transport': { errorMessage: e => e.message },
+    './share-route': { shareRouteSegments: () => [] },
+    './share-card-export': {
+      captureRunCardImage: async () => {
+        const uri = `image-${++next}.png`;
+        calls.push(['capture', uri]);
+        if (fail) throw new Error('이미지 생성 실패');
+        if (defer) return new Promise(resolve => { finishCapture = () => resolve(uri); });
+        return uri;
+      },
+      releaseRunCardImage: uri => calls.push(['release', uri]),
+      shareRunCardImage: async uri => { calls.push(['share', uri]); },
+    },
+  });
+  const props = { run: { id: 'run', startedAt: 0, distanceMeters: 5000, durationSeconds: 1800, routePoints: [] } };
+  let nodes = flatten(h.render('RunShareCard', props));
+  assert.equal(calls.length, 0);
+  nodes.find(({ node }) => node.props?.collapsable === false).node.props.onLayout();
+  h.render('RunShareCard', props);
+  await Promise.resolve();
+  nodes = flatten(h.render('RunShareCard', props));
+  assert.equal(calls[0][0], 'capture');
+  assert.equal(nodes.find(({ node }) => node.type === 'PaceButton').node.props.disabled, false);
+  nodes.find(({ node }) => node.type === 'Switch').node.props.onValueChange(false);
+  h.render('RunShareCard', props);
+  await Promise.resolve();
+  nodes = flatten(h.render('RunShareCard', props));
+  assert.equal(calls.filter(c => c[0] === 'capture').length, 2);
+  assert.deepEqual(calls.find(c => c[0] === 'release'), ['release', 'image-1.png']);
+  nodes.find(({ node }) => node.type === 'PaceButton').node.props.onPress();
+  await Promise.resolve();
+  assert.deepEqual(calls.find(c => c[0] === 'share'), ['share', 'image-2.png']);
+  await new Promise(setImmediate);
+  nodes = flatten(h.render('RunShareCard', props));
+  fail = true;
+  nodes.find(({ node }) => node.type === 'Switch').node.props.onValueChange(true);
+  h.render('RunShareCard', props);
+  await new Promise(setImmediate);
+  nodes = flatten(h.render('RunShareCard', props));
+  assert.equal(nodes.find(({ node }) => node.type === 'PaceButton').node.props.disabled, true);
+  assert.ok(nodes.some(({ node }) => node.type === 'Text' && node.props.children === '이미지 생성 실패'));
+  fail = false;
+  nodes.find(({ node }) => node.props?.label === '카드 이미지 다시 만들기').node.props.onPress();
+  h.render('RunShareCard', props);
+  await new Promise(setImmediate);
+  nodes = flatten(h.render('RunShareCard', props));
+  assert.equal(nodes.find(({ node }) => node.type === 'PaceButton').node.props.disabled, false);
+  assert.ok(calls.some(c => c[0] === 'release' && c[1] === 'image-2.png'));
+  defer = true;
+  nodes.find(({ node }) => node.type === 'Switch').node.props.onValueChange(false);
+  h.render('RunShareCard', props);
+  h.unmount();
+  finishCapture();
+  await new Promise(setImmediate);
+  assert.ok(calls.some(c => c[0] === 'release' && c[1] === 'image-4.png'));
+  assert.ok(calls.some(c => c[0] === 'release' && c[1] === 'image-5.png'));
+});
+
+test('크루의 목표 0은 달성이 아니라 미설정으로 표시하고 일반 멤버는 수정할 수 없다', () => {
+  const h = renderHarness('features/crew/crew-goal-card.tsx', {
+    'react-native': { TextInput: 'TextInput', View: 'View', StyleSheet: { create: s => s } },
+    '@/components/pace-text': { PaceText: 'Text' },
+    '@/components/pace-button': { PaceButton: 'PaceButton' },
+    '@/components/pace-feedback': { PaceQueryState: 'PaceQueryState' },
+    '@/constants/pace': { PaceColors: {} },
+    '@/data/running-progress-repository': {},
+    '@/lib/api-transport': {},
+    '@/hooks/use-focus-query': { useFocusQuery: () => ({
+      data: { targetKm: 0, totalKm: 0, month: '2026-10', canEdit: false, contributors: [] },
+      isLoading: false,
+    }) },
+  });
+  const nodes = flatten(h.render('CrewGoalCard', { crewId: 'crew' }));
+  const text = nodes.filter(({ node }) => node.type === 'Text').map(({ node }) => node.props.children).join(' ');
+  assert.match(text, /크루장이 이번 달 목표를 설정하면/);
+  assert.doesNotMatch(text, /함께 목표를 달성했어요/);
+  assert.equal(nodes.filter(({ node }) => node.type === 'TextInput').length, 0);
+  assert.equal(nodes.filter(({ node }) => node.type === 'PaceButton').length, 0);
+});
 
 function loginHarness(overrides = {}) {
   return renderHarness('features/auth/login-screen.tsx', {

@@ -14,8 +14,6 @@ export function GoogleWebButton({ disabled, onCredential }: GoogleWebButtonProps
 
   useEffect(() => {
     let active = true;
-    let observer: ResizeObserver | undefined;
-    let frame: number | undefined;
     void loadGoogleIdentity().then((sdk) => {
       if (!active || !host.current) return;
       sdk.initialize({
@@ -29,25 +27,10 @@ export function GoogleWebButton({ disabled, onCredential }: GoogleWebButtonProps
           current.current.onCredential(credential);
         },
       });
-      const element = host.current;
-      let renderedWidth = 0;
-      const render = () => {
-        if (!active) return;
-        const width = Math.min(400, Math.floor(element.getBoundingClientRect().width));
-        if (width <= 0 || width === renderedWidth) return;
-        renderedWidth = width;
-        element.replaceChildren();
-        sdk.renderButton(element, {
-          type: 'standard', theme: 'outline', size: 'large', text: 'continue_with',
-          shape: 'pill', locale: 'ko', width,
-        });
-      };
-      render();
-      observer = new ResizeObserver(() => {
-        if (frame !== undefined) cancelAnimationFrame(frame);
-        frame = requestAnimationFrame(render);
+      host.current.replaceChildren();
+      sdk.renderButton(host.current, {
+        type: 'icon', theme: 'outline', size: 'large', shape: 'circle', locale: 'ko',
       });
-      observer.observe(element);
       setLoading(false);
     }).catch((error: unknown) => {
       if (!active) return;
@@ -57,15 +40,14 @@ export function GoogleWebButton({ disabled, onCredential }: GoogleWebButtonProps
     });
     return () => {
       active = false;
-      observer?.disconnect();
-      if (frame !== undefined) cancelAnimationFrame(frame);
     };
   }, [attempt]);
 
   return (
-    <div style={{ width: '100%', minWidth: 0, minHeight: 44, color: '#B0B3AB', fontSize: 12, textAlign: 'center' }}>
+    <div style={{ minWidth: 56, minHeight: 56, color: '#B0B3AB', fontSize: 12, textAlign: 'center' }}>
       <div ref={host} inert={disabled} aria-hidden={disabled}
-        style={{ width: '100%', minWidth: 0, display: 'flex', justifyContent: 'center', opacity: disabled ? 0.45 : 1 }} />
+        style={{ minWidth: 56, minHeight: 56, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          opacity: disabled ? 0.45 : 1 }} />
       {(loading || disabled) && <p role="status">{disabled ? '로그인 중…' : 'Google 로그인 불러오는 중…'}</p>}
       {failure && <div role="alert">
         <p>{failure}</p>

@@ -38,11 +38,12 @@ function ProfileEditFrame({ children }: Readonly<{ children: React.ReactNode }>)
   return (
     <SafeAreaView style={styles.screen}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-          <BackHeader />
+        <View style={styles.header}><BackHeader />
           <Text style={styles.eyebrow}>MY PROFILE</Text>
           <Text style={styles.title}>프로필 수정</Text>
           <Text style={styles.description}>나를 소개하는 이름과 한 줄을 남겨보세요.</Text>
+        </View>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           {children}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -115,13 +116,14 @@ function ProfileForm({ profile }: Readonly<{ profile: Me }>) {
 }
 
 const styles = StyleSheet.create({
+  header: { paddingHorizontal: 24, paddingBottom: 16, width: '100%', maxWidth: 560, alignSelf: 'center' },
   screen: { flex: 1, backgroundColor: C.background },
   flex: { flex: 1 },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 24 },
   eyebrow: { marginTop: 24, color: C.accent, fontSize: 10, letterSpacing: 2 },
   title: { marginTop: 10, color: C.text, fontSize: 27, fontWeight: '700' },
   description: { marginTop: 8, color: C.muted, fontSize: 13, lineHeight: 21 },
-  form: { marginTop: 28, padding: 20, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 22 },
+  form: { marginTop: 12, padding: 20, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 22 },
   label: { color: C.text, fontSize: 13, fontWeight: '600' },
   labelRow: { marginTop: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   optional: { color: C.subtle, fontSize: 11 },

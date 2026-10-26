@@ -208,7 +208,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   loginOptions: {
-    gap: 4,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 20,
   },
   signInSection: { width: '100%' },
   sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },

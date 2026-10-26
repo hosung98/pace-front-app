@@ -71,12 +71,13 @@ export function PermissionsScreen() {
     router.replace(from === 'settings' ? '/settings' : session ? '/main' : '/login');
   });
   return <SafeAreaView style={styles.screen}>
-    <View style={styles.header}><BackHeader /></View>
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <View style={styles.header}><BackHeader />
       <View style={styles.intro}>
         <Text style={styles.title}>PACE 접근 권한 안내</Text>
         <Text style={styles.body}>러닝에 필요한 권한과 사용 목적을 알려드려요.</Text>
       </View>
+    </View>
+    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.section}>
         <Text style={styles.heading}>필수 접근 권한</Text>
         <Text style={styles.body}>필수 접근 권한 없음</Text>

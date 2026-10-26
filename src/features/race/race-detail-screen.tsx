@@ -100,15 +100,15 @@ export function RaceDetailScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <BackHeader backLabel="대결 목록으로 돌아가기" />
+      <View style={styles.header}><BackHeader backLabel="대결 목록으로 돌아가기" />
         <View style={styles.badgeRow}>
           <RaceStatusBadge status={status} />
           {race.visibility === 'private' ? <Text style={styles.tag}>비공개</Text> : <Text style={styles.tag}>공개</Text>}
         </View>
         <Text style={styles.title}>{race.title}</Text>
         <Text style={styles.host}>방장 {race.hostNickname}{race.isHost ? ' (나)' : ''}</Text>
-
+      </View>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Hero race={race} status={status} now={now} />
 
         <View style={styles.infoCard}>
@@ -345,6 +345,7 @@ function Results({ participants, distanceMeters }: Readonly<{ participants: Race
 }
 
 const styles = StyleSheet.create({
+  header: { paddingHorizontal: 24, paddingBottom: 16, width: '100%', maxWidth: 560, alignSelf: 'center' },
   screen: { flex: 1, backgroundColor: C.background },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 40 },
   missing: { marginTop: 40, color: C.muted, fontSize: 13, textAlign: 'center' },

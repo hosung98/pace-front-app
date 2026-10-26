@@ -28,10 +28,13 @@ export function AppUpdateScreen() {
     } finally { operating.current = false; setBusy(false); }
   };
   return <SafeAreaView style={styles.screen}>
-    <ScrollView contentContainerStyle={styles.content}>
-      <BackHeader />
+    <View style={styles.header}><BackHeader />
+    <View style={styles.headingBlock}>
       <Text style={styles.title}>앱 정보 · 업데이트</Text>
       <Text style={styles.body}>현재 이 기기에서 실행 중인 버전이에요.</Text>
+    </View>
+    </View>
+    <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.card}>
         <Text style={styles.version}>PACE {info.version}{info.build ? ` (${info.build})` : ''}</Text>
         <Text style={styles.label}>실행 코드</Text>
@@ -62,6 +65,8 @@ export function AppUpdateScreen() {
 }
 
 const styles = StyleSheet.create({
+  header: { paddingHorizontal: 24, width: '100%', maxWidth: 560, alignSelf: 'center' },
+  headingBlock: { gap: 8, paddingTop: 12, paddingBottom: 4 },
   screen: { flex: 1, backgroundColor: C.background },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', padding: 24, gap: 20, paddingBottom: 40 },
   title: { color: C.text, fontSize: 24, fontWeight: '700' },

@@ -33,7 +33,9 @@ APIs rather than sample data; an empty account can create a crew or race room.
   statistics, crew, and profile. Switching tabs does not add a back-stack
   entry. App settings and run details are pushed as sub-screens with a back
   affordance; top-level tabs do not need one.
-- The brand header stays fixed; tab titles scroll with content to preserve space on small phones.
+- Brand/back navigation, page titles, and introductory descriptions stay fixed together;
+  only the body scrolls on tabs and secondary list, detail, form, and settings screens.
+  Login and onboarding keep their scrollable introduction layouts.
 - The crew tab has two segments. **Crew** shows weekly/monthly crew distance
   rankings, crew detail (member distances, invite code), create, join by invite
   code or request, request approval/rejection, leadership transfer, and leave
@@ -158,11 +160,12 @@ Expo Go, 웹, TypeScript 검사만으로 Apple 로그인·Face ID·HealthKit의 
   background 권한은 러닝 시작 시, Apple 건강은 처리 범위를 읽고 연동을 선택할 때 요청합니다.
   위치를 거부해도 확인 후 계속할 수 있고, 설정에서 다시 안내를 열 수 있습니다. Face ID는 로그인 후 별도 opt-in입니다.
 - 이용 안내에서 온보딩 다시 보기 링크를 제거했습니다. 온보딩은 설치별 최초 완료 전까지 표시합니다.
-- iOS 로그인 버튼은 공통 컴포넌트로 시스템 글꼴 18pt·반굵기, 시각 높이 44pt,
-  터치 높이 52pt를 사용하며 공식 Apple SVG의 비율·패딩은 유지합니다.
+- iOS 로그인 버튼은 문구 없이 공식 로고만 표시하는 56pt 원형 버튼을 가로로 배치합니다.
+  VoiceOver에는 제공자별 로그인 이름을 전달하며 공식 Apple SVG의 비율·패딩은 유지합니다.
   [Apple 공식 로고 자산](https://developer.apple.com/design/resources/)과 동봉 라이선스는
   `assets/images/apple-login-*`에 보관합니다. 로그인 중에는 해당 제공자에만 진행 표시가 나타나며,
-  두 버튼의 제목은 바뀌지 않고 중복 인증은 차단됩니다. Google 아이콘은 Google 제공
+  다른 제공자의 버튼에는 진행 표시가 나타나지 않고 중복 인증은 차단됩니다. 웹은 Google SDK의 공식 원형 아이콘 버튼을 사용합니다.
+  Google 아이콘은 Google 제공
   [로그인 브랜드 자산](https://developers.google.com/identity/branding-guidelines)을 기기에 포함해 네트워크 없이 표시합니다.
 - 권한 안내는 필수 권한 없음, 선택 권한별 사용 목적, 변경 방법을 구분하고 확인 CTA를 하단에 고정합니다.
   실제 구현된 위치·건강·앱 잠금만 안내하며, 미구현 사진 업로드·푸시 권한을 미리 요구하지 않습니다.
@@ -186,8 +189,46 @@ Expo Go, 웹, TypeScript 검사만으로 Apple 로그인·Face ID·HealthKit의 
   서버 소재지·위탁 업체·국외 이전 고지를 확정하고 문서를 법률 검토해야 합니다.
   이 화면을 추가한 것만으로 법적 요건이나 App Store 공개용 정책 URL 준비가 완료되지는 않습니다.
 - Google/Apple 버튼은 별개의 터치 영역입니다. 크루의 내 행은 카드 여백 없이 전체 연두색으로 표시하며,
-  빈 랭킹에는 내부 여백을 둡니다. 기록을 포함한 탭 제목은 콘텐츠와 함께 스크롤합니다.
+  빈 랭킹에는 내부 여백을 둡니다. 기록을 포함한 탭 제목·설명은 브랜드 헤더와 함께 고정합니다.
   Live Activity 타이머는 표시 영역별 폭과 오른쪽 정렬을 지정합니다.
+
+### 러닝 성취 · 목표 · 공유
+
+- 홈과 내 메뉴에서 배지 컬렉션·개인 최고 기록에 접근합니다. 배지는 첫 러닝, 단일 거리,
+  누적 거리, 한 주 3일, 월 10회 달성으로 모으며 로그인 계정은 획득 이력과 대표 배지를 서버에 보관합니다.
+- 배지는 외부 이미지·아이콘 팩을 다운로드하지 않고 PACE 전용 도형·타이포그래피로 직접 그립니다.
+  첫 러닝·거리·꾸준함·크루 목표의 10종 디자인을 컬렉션, 대표 배지 요약, 완료 화면에 재사용합니다.
+  획득 배지는 고유 컬러, 미획득 배지는 회색·진행률·도전 중 문구로 구분합니다.
+  외부 배지 에셋 라이선스나 유료 구독은 필요하지 않으며 새 네이티브 의존성도 추가하지 않습니다.
+  게스트는 기기의 PACE 기록에서 계산합니다. Apple 건강에서 읽은 운동은 중복 합산하지 않습니다.
+- 주간 목표는 기존 계정 설정의 `weeklyGoalMeters`를 그대로 사용합니다.
+  주·월 집계는 Asia/Seoul 기준입니다. 개인 최고 기록은 최장 거리와 실제 연속 GPS 1km 최단 경과 시간입니다.
+  GPS 시각·거리로 정확히 1km 경계를 보간하고, 30초 초과 공백·부정확한 위치·비현실적 속도 구간을 끊습니다.
+  짧은 정지는 경과 시간에 포함되며 전체 평균 페이스를 1/5/10km 기록으로 임의 환산하지 않습니다.
+  동률은 최초 기록을 유지하고 완료 시 해당 러닝에서 세운 PR만 축하 팝업·애니메이션으로 보여줍니다.
+  동작 줄이기 설정에서는 움직임을 생략합니다.
+- 러닝 전 자유·3/5/10km·30분 목표와 음성 코치를 선택합니다. 목표 도달 후 자동 종료하지 않습니다.
+  음성은 러닝 화면을 열어 둔 동안 1km마다 거리·평균 페이스와 목표 달성을 안내합니다.
+  백그라운드 GPS 기록과 달리 잠금/다른 화면에서 음성 안내를 보장하지 않으며 iPhone 무음 모드에서는 들리지 않을 수 있습니다.
+- 러닝 시작·일시정지·종료 버튼과 뒤로가기는 스크롤 밖에 고정합니다. 종료 화면에서 성취·배지와 공유 카드를 확인하고
+  러닝 상세에서 컨디션(쉬움/적당/힘듦)·500자 이내 메모를 저장합니다.
+  로그인 계정은 러닝 서버 동기화 후 회고를 계정에 저장하며, 게스트 회고는 기기에만 저장합니다.
+- 공유 이미지는 완료 화면에서 자동 생성되는 인증서 스타일 PNG이며 거리·시간·페이스·경로 개요,
+  해당 러닝에서 얻은 배지·PR을 포함합니다. 프라이버시 옵션을 바꾸면 이미지를 다시 만들고,
+  OS 공유창에서 설치된 인스타그램·카카오톡 등 지원 대상을 선택합니다. 특정 앱으로 자동 게시하지 않습니다.
+  지도 배경 타일이 아닌 경로 개요를 사용하며 생성·공유 오류와 재시도를 명시적으로 표시합니다.
+  기본적으로 출발·도착 반경 200m를 숨기고 비공개 구간을 직선으로 잇지 않습니다.
+  위치 추정 가능성이 완전히 제거되는 것은 아니므로 공유 전 이미지를 확인해야 합니다.
+  사진 라이브러리 권한 없이 OS 공유창을 사용하며 웹에서는 이미지 공유를 지원하지 않습니다.
+- 크루 상세에 월간 공동 목표·기여 거리를 표시합니다. 목표 변경은 크루장만 가능하고
+  현재 멤버가 가입 후 시작한 해당 월의 PACE 러닝을 합산합니다.
+  설정 전 목표는 미설정으로 안내하며, 목표 설정 후 새로 달성했을 때 기여한 현재 멤버에게 공동 배지를 지급합니다.
+  목표를 낮추거나 과거 기록을 늦게 가져온 것만으로 소급 지급하지 않습니다.
+- **서버 배포 전에** 백엔드 `database/progress-schema.sql`을 운영자가 수동 적용해야 합니다.
+  실제 DB 변경이나 서버 배포는 이 코드 작업에 포함되지 않습니다.
+- **새 네이티브 빌드가 필요합니다.** `expo-speech`, `expo-sharing`, `react-native-view-shot` 추가로
+  앱 버전/런타임을 **1.0.5**로 올렸습니다. 기존 1.0.4 빌드에 이 변경을 OTA로 보내면 안 됩니다.
+  EAS 빌드 및 실제 iPhone에서 음성·이미지 공유·GPS·안전 영역을 확인한 뒤 배포해야 합니다.
 
 ### 검증 및 실제 기기 확인 항목
 
@@ -296,8 +337,8 @@ npx expo start --web --port 8088
 ### 네이티브 빌드와 후속 EAS Update
 
 Google 네이티브 모듈, iOS URL scheme, SecureStore가 추가되었으므로 **새 iOS 빌드가 필요**합니다.
-`app.json`의 앱 버전은 `1.0.3`, runtimeVersion 정책은 `appVersion`입니다.
-기존 `1.0.2` 설치본에 이 변경을 OTA로 전달하지 마세요.
+`app.json`의 현재 앱 버전은 `1.0.5`, runtimeVersion 정책은 `appVersion`입니다.
+현재 네이티브 변경을 기존 `1.0.4` 이하 설치본에 OTA로 전달하지 마세요.
 
 ```bash
 # iPhone/TestFlight용 서명 빌드 생성 (업로드·심사 요청은 하지 않음)
@@ -306,7 +347,7 @@ npx eas-cli@latest build --platform ios --profile production
 # App Store Connect/TestFlight 업로드가 필요할 때만 별도 실행
 npx eas-cli@latest submit --platform ios --profile production --latest
 
-# 1.0.3 설치 후 네이티브 변경 없는 JS/UI 수정에만 사용
+# 1.0.5 빌드 설치 후 네이티브 변경 없는 JS/UI 수정에만 사용
 npx eas-cli@latest update --channel production --environment production --platform ios --message "Connect crews and races; polish profile UX"
 ```
 

@@ -74,10 +74,10 @@ function AccountSettings() {
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <View style={styles.fixedContent}>
         <BackHeader backLabel="마이 화면으로 돌아가기" />
+        <Text style={styles.title}>앱 설정</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>앱 설정</Text>
         <Text style={styles.sectionTitle}>보안 · 건강 연동</Text>
         <View style={styles.card}>
           <SettingSwitch title="Face ID · 기기 암호로 앱 잠금"
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.background },
   fixedContent: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24 },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 28 },
-  title: { marginTop: 12, color: C.text, fontSize: 25, fontWeight: '700' },
+  title: { marginTop: 12, marginBottom: 4, color: C.text, fontSize: 25, fontWeight: '700' },
   sectionTitle: { marginTop: 20, marginBottom: 8, color: C.text, fontSize: 14, fontWeight: '700' },
   card: { paddingHorizontal: 15, borderRadius: 18, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   deleteConfirmation: { paddingVertical: 18, marginTop: 14, gap: 14 },

@@ -28,8 +28,8 @@ export function BackHeader({ backLabel = '이전 화면으로 돌아가기', sho
 
 const styles = StyleSheet.create({
   header: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backButton: { width: 42, height: 42, alignItems: 'flex-start', justifyContent: 'center' },
+  backButton: { width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' },
   backArrow: { color: C.text, fontSize: 31, lineHeight: 34 },
-  spacer: { width: 42 },
+  spacer: { width: 44 },
   pressed: { opacity: 0.6 },
 });

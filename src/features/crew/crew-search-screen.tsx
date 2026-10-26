@@ -41,10 +41,11 @@ export function CrewSearchScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <BackHeader backLabel="크루 화면으로 돌아가기" />
+      <View style={styles.header}><BackHeader backLabel="크루 화면으로 돌아가기" />
         <Text style={styles.eyebrow}>FIND CREW</Text>
         <Text style={styles.title}>크루 찾기</Text>
+      </View>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
         <View style={styles.searchBox}>
           <PaceIcon name="search" color={C.subtle} size={18} />
@@ -142,6 +143,7 @@ function CrewResultCard({ crew, onPress }: Readonly<{ crew: CrewSearchItem; onPr
 }
 
 const styles = StyleSheet.create({
+  header: { paddingHorizontal: 24, paddingBottom: 16, width: '100%', maxWidth: 560, alignSelf: 'center' },
   screen: { flex: 1, backgroundColor: C.background },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 40 },
   eyebrow: { marginTop: 16, color: C.accent, fontSize: 9, fontWeight: '600', letterSpacing: 2 },

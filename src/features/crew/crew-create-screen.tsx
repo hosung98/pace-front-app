@@ -61,14 +61,14 @@ export function CrewCreateScreen({ crew }: Readonly<{ crew?: CrewDetail }> = {})
   return (
     <SafeAreaView style={styles.screen}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <BackHeader backLabel="크루 화면으로 돌아가기" />
+        <View style={styles.header}><BackHeader backLabel="크루 화면으로 돌아가기" />
           <Text style={styles.eyebrow}>{crew ? 'EDIT CREW' : 'NEW CREW'}</Text>
           <Text style={styles.title}>{crew ? '크루 정보 수정' : '크루 만들기'}</Text>
           <Text style={styles.description}>
             {crew ? '멤버들이 알아볼 수 있도록 이름과 소개, 활동 지역을 관리해요.' : '만든 사람이 크루장이 돼요. 초대 코드를 공유하거나 가입 신청을 승인해서 멤버를 모아요.'}
           </Text>
-
+        </View>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Field label="크루 이름" count={`${name.length}/${CREW_NAME_MAX_LENGTH}`}>
             <TextInput
               accessibilityLabel="크루 이름"
@@ -143,6 +143,7 @@ function Field({
 }
 
 const styles = StyleSheet.create({
+  header: { paddingHorizontal: 24, paddingBottom: 16, width: '100%', maxWidth: 560, alignSelf: 'center' },
   screen: { flex: 1, backgroundColor: C.background },
   flex: { flex: 1 },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 40 },

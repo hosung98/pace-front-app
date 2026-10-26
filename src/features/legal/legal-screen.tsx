@@ -9,6 +9,7 @@ import { PaceColors as C } from '@/constants/pace';
 
 type Section = Readonly<{ title: string; body: string }>;
 const privacy: readonly Section[] = [
+  { title: '러닝 성취·회고·이미지 공유', body: 'PACE 러닝으로 주간 목표, 배지 획득 이력과 대표 배지, 개인 최장 거리를 계산합니다. 로그인 계정은 성취와 선택한 컨디션·러닝 메모를 서버에 저장합니다. 게스트 메모는 기기에만 남습니다. 크루 공동 목표에는 현재 멤버의 가입 이후 러닝 거리와 닉네임이 표시됩니다. 공유 카드는 사용자가 OS 공유창으로 선택한 앱에 전달되며 기본적으로 출발·도착 반경 200m를 숨깁니다. 경로의 다른 부분으로 위치가 추정될 수 있으므로 공유 전에 확인해 주세요. 음성 코치에는 녹음이나 마이크 접근이 필요하지 않습니다.' },
   { title: '1. 운영자와 문의', body: 'PACE 운영자 및 개인정보 문의 담당자는 김호성입니다. 문의: hosung0806@gmail.com. 이 문서는 현재 테스트 서비스의 데이터 흐름을 안내하는 초안입니다. 정식 공개 전 서버 소재지·위탁 업체·국외 이전 여부·로그 및 백업 보관기간을 확정하고 법률 검토 후 갱신해야 합니다.' },
   { title: '2. 처리하는 정보와 목적', body: '소셜 로그인 제공자의 식별자, 제공된 이메일·이름, PACE 닉네임·프로필·공개 범위·설정, 인증 토큰을 계정 생성·인증·계정 관리에 사용합니다. 러닝 시작·종료 시각, 거리, 시간, GPS 경로를 기록·통계·동기화에 사용합니다. 크루 가입·역할·신청 및 대결 참가 내역은 커뮤니티 운영에 사용합니다.' },
   { title: '3. 위치 정보와 기기 모드', body: '위치는 사용자가 GPS 러닝을 시작하거나 내 동네 찾기를 선택할 때 사용합니다. 진행 중인 러닝은 화면이 잠겨도 위치를 기록하며 종료하면 수집을 중단합니다. 로그인 전 러닝은 기기에 저장됩니다. 로그인 시 이 기기의 미연결 기록과 GPS 경로가 해당 PACE 계정의 서버로 전송됩니다. 업로드 대기 기록은 기기에 남아 재시도됩니다.' },
@@ -38,9 +39,10 @@ export function LegalScreen({ kind }: Readonly<{ kind: 'privacy' | 'terms' | 'su
   const [failure, setFailure] = useState<string | null>(null);
   const sections = kind === 'privacy' ? privacy : kind === 'terms' ? terms : support;
   return <SafeAreaView style={styles.screen}>
-    <ScrollView contentContainerStyle={styles.content}>
-      <BackHeader />
+    <View style={styles.header}><BackHeader />
       <Text style={styles.title}>{kind === 'privacy' ? '개인정보 처리방침' : kind === 'terms' ? '이용약관' : '도움말 · 문의'}</Text>
+    </View>
+    <ScrollView contentContainerStyle={styles.content}>
       {kind !== 'support' ? <Text style={styles.notice}>테스트 서비스 안내 초안 · 2026.10.26{'\n'}정식 공개 전 보관기간·인프라 정보 확정 및 법률 검토가 필요합니다.</Text> : null}
       {sections.map((section) => <View key={section.title} style={styles.section}>
         <Text style={styles.heading}>{section.title}</Text>
@@ -60,9 +62,10 @@ export function LegalScreen({ kind }: Readonly<{ kind: 'privacy' | 'terms' | 'su
 }
 
 const styles = StyleSheet.create({
+  header: { paddingHorizontal: 24, width: '100%', maxWidth: 560, alignSelf: 'center' },
   screen: { flex: 1, backgroundColor: C.background },
   content: { width: '100%', maxWidth: 640, alignSelf: 'center', padding: 24, paddingBottom: 40, gap: 24 },
-  title: { color: C.text, fontSize: 25, fontWeight: '700' },
+  title: { marginTop: 12, marginBottom: 4, color: C.text, fontSize: 25, fontWeight: '700' },
   notice: { color: C.accent, fontSize: 12, lineHeight: 20, padding: 16, borderRadius: 14, backgroundColor: C.surface },
   section: { gap: 10 },
   heading: { color: C.text, fontSize: 16, fontWeight: '600' },

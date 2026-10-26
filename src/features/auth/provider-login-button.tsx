@@ -1,4 +1,4 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 
 export function ProviderLoginButton({ provider, disabled, loading, onPress }: Readonly<{
@@ -12,30 +12,22 @@ export function ProviderLoginButton({ provider, disabled, loading, onPress }: Re
     accessibilityState={{ disabled, busy: loading }} disabled={disabled} onPress={onPress}
     style={({ pressed }) => [styles.touchTarget, pressed && styles.pressed]}>
     <View style={[styles.button, disabled && !loading && styles.disabled]}>
-      <View style={styles.statusSlot} />
-      <View style={styles.content}>
+      {loading ? <ActivityIndicator size="small" color="#000000" /> : (
         <Image source={provider === 'apple' ? require('@/assets/images/apple-login-logo.svg')
           : require('@/assets/images/google-logo.png')}
         style={provider === 'apple' ? styles.appleIcon : styles.googleIcon}
         contentFit="contain" accessible={false} />
-        <Text style={styles.title}>{label}</Text>
-      </View>
-      <View style={styles.statusSlot}>
-        {loading ? <ActivityIndicator size="small" color="#000000" /> : null}
-      </View>
+      )}
     </View>
   </Pressable>;
 }
 
 const styles = StyleSheet.create({
-  touchTarget: { minHeight: 52, justifyContent: 'center', paddingVertical: 4 },
-  button: { minHeight: 44, paddingHorizontal: 8, borderRadius: 10, backgroundColor: '#FFFFFF',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  content: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexShrink: 1 },
-  title: { color: '#000000', fontSize: 18, fontWeight: '600', lineHeight: 24, flexShrink: 1, paddingVertical: 10 },
+  touchTarget: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center' },
+  button: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#FFFFFF',
+    alignItems: 'center', justifyContent: 'center' },
   appleIcon: { width: 31, height: 44 },
-  googleIcon: { width: 20, height: 20, marginHorizontal: (31 - 20) / 2 },
-  statusSlot: { width: 24, alignItems: 'center', justifyContent: 'center' },
+  googleIcon: { width: 24, height: 24 },
   disabled: { opacity: 0.45 },
   pressed: { opacity: 0.7 },
 });

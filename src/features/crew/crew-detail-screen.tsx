@@ -24,6 +24,7 @@ import {
 import { formatKm } from '@/lib/format';
 
 import { formatRegion } from './regions';
+import { CrewGoalCard } from './crew-goal-card';
 import { CREW_REJOIN_COOLDOWN_HOURS, type CrewDetail, type CrewPeriod } from './types';
 
 const PERIOD_OPTIONS = [
@@ -112,11 +113,12 @@ export function CrewDetailScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <BackHeader backLabel="크루 목록으로 돌아가기" />
+      <View style={styles.header}><BackHeader backLabel="크루 목록으로 돌아가기" />
         <Text style={styles.eyebrow}>CREW</Text>
         <Text style={styles.title}>{detail.name}</Text>
         {detail.intro ? <Text style={styles.intro}>{detail.intro}</Text> : null}
+      </View>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.meta}>
           {formatRegion(detail.region)} · 크루장 {detail.leaderNickname} · 멤버 {detail.memberCount}/{detail.maxMembers}명
         </Text>
@@ -173,6 +175,7 @@ export function CrewDetailScreen() {
           </View>
         ) : null}
 
+        {isMember ? <CrewGoalCard key={detail.id} crewId={detail.id} /> : null}
         <Text style={styles.sectionTitle}>멤버별 거리</Text>
         <View style={[styles.card, styles.memberCard]}>
           {detail.members.length === 0 ? (
@@ -266,6 +269,7 @@ function Stat({ value, unit, label, highlight = false }: Readonly<{ value: strin
 }
 
 const styles = StyleSheet.create({
+  header: { paddingHorizontal: 24, paddingBottom: 16, width: '100%', maxWidth: 560, alignSelf: 'center' },
   requestRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 14 },
   screen: { flex: 1, backgroundColor: C.background },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 40 },

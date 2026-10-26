@@ -121,10 +121,11 @@ export function RaceCreateScreen({ race }: Readonly<{ race?: RaceDetail }> = {})
   return (
     <SafeAreaView style={styles.screen}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <BackHeader backLabel="대결 화면으로 돌아가기" />
+        <View style={styles.header}><BackHeader backLabel="대결 화면으로 돌아가기" />
           <Text style={styles.eyebrow}>{race ? 'EDIT RACE' : 'NEW RACE'}</Text>
           <Text style={styles.title}>{race ? '대결 정보 수정' : '대결 방 만들기'}</Text>
+        </View>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {race ? <Text style={styles.rule}>{termsLocked
             ? '다른 참가자가 있어 이름과 최대 인원만 수정할 수 있어요. 최대 인원은 현재 참가 인원보다 줄일 수 없어요.'
             : '모집 중일 때만 수정할 수 있어요. 다른 참가자가 들어오면 거리·시간 등 약속 조건은 변경할 수 없어요.'}</Text> : null}
@@ -300,6 +301,7 @@ function Counter({
 }
 
 const styles = StyleSheet.create({
+  header: { paddingHorizontal: 24, paddingBottom: 16, width: '100%', maxWidth: 560, alignSelf: 'center' },
   screen: { flex: 1, backgroundColor: C.background },
   flex: { flex: 1 },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 40 },

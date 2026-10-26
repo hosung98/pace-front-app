@@ -6,8 +6,8 @@ export type GoogleIdentity = {
     auto_select: boolean;
   }) => void;
   renderButton: (element: HTMLElement, options: {
-    type: 'standard'; theme: 'outline'; size: 'large'; text: 'continue_with';
-    shape: 'pill'; locale: string; width: number;
+    type: 'icon'; theme: 'outline'; size: 'large';
+    shape: 'circle'; locale: string;
   }) => void;
 };
 

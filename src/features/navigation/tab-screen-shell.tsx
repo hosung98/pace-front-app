@@ -34,16 +34,16 @@ export function TabScreenShell({
             <Text style={styles.previewLabel}>{badge}</Text>
           </View>
         </View>
-      </View>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}>
         <View style={styles.heading}>
           <Text style={styles.eyebrow}>{eyebrow}</Text>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.description}>{description}</Text>
         </View>
+      </View>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}>
         {children}
         <Text style={styles.disclaimer}>{disclaimer}</Text>
       </ScrollView>

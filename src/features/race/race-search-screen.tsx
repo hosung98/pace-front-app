@@ -52,11 +52,12 @@ export function RaceSearchScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <BackHeader backLabel="대결 화면으로 돌아가기" />
+      <View style={styles.header}><BackHeader backLabel="대결 화면으로 돌아가기" />
         <Text style={styles.eyebrow}>FIND RACE</Text>
         <Text style={styles.title}>대결 찾기</Text>
         <Text style={styles.description}>대결은 각자 있는 곳에서 같은 시간에 달려요. 거리와 시간으로 골라 보세요.</Text>
+      </View>
+      <ScrollView contentContainerStyle={styles.content}>
 
         <Text style={styles.filterLabel}>거리</Text>
         <ChoiceChips size="small" options={DISTANCE_OPTIONS} value={distance} onChange={setDistance} />
@@ -120,6 +121,7 @@ export function RaceSearchScreen() {
 }
 
 const styles = StyleSheet.create({
+  header: { paddingHorizontal: 24, paddingBottom: 16, width: '100%', maxWidth: 560, alignSelf: 'center' },
   screen: { flex: 1, backgroundColor: C.background },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 40 },
   eyebrow: { marginTop: 16, color: C.accent, fontSize: 9, fontWeight: '600', letterSpacing: 2 },

@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -25,6 +25,11 @@ import {
   stopLocationTracking,
 } from './location-tracking';
 import { RunReadyView } from './run-ready-view';
+import { RunOptions } from './run-options';
+import { runGoalProgress } from './run-goals';
+import { useRunGuidance } from './use-run-guidance';
+import { RunCompletion } from './run-completion';
+import type { CompletedRun, RunGoal } from './types';
 import {
   createActiveRun,
   getCurrentPaceSecondsPerKm,
@@ -43,9 +48,14 @@ export function RunTrackingScreen() {
   const { run } = snapshot;
   const [now, setNow] = useState(0);
   const [busy, setBusy] = useState(false);
+  const operating = useRef(false);
   const [confirmingFinish, setConfirmingFinish] = useState(false);
   const [message, setMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [goal, setGoal] = useState<RunGoal>(null);
+  const [voice, setVoice] = useState(false);
+  const [completedRun, setCompletedRun] = useState<CompletedRun | null>(null);
+  const guidanceFailure = useRunGuidance(run, now);
 
   useEffect(() => {
     refreshActiveRunSnapshot().catch((error: unknown) => {
@@ -72,12 +82,16 @@ export function RunTrackingScreen() {
   };
 
   const startRun = async () => {
+    if (operating.current) return;
+    operating.current = true;
     setBusy(true);
     setMessage('');
     try {
       if (!(await ensureReady())) return;
       const nextRun = createActiveRun();
       nextRun.ownerId = getSessionState().session?.user.id ?? null;
+      nextRun.goal = goal;
+      nextRun.voiceGuidance = voice;
       await writeActiveRun(nextRun);
       setNow(nextRun.startedAt);
       await startLocationTracking();
@@ -89,12 +103,14 @@ export function RunTrackingScreen() {
         'GPS 러닝을 시작하지 못했어요. 권한과 위치 설정을 확인해 주세요.',
       ));
     } finally {
+      operating.current = false;
       setBusy(false);
     }
   };
 
   const pauseRun = async () => {
-    if (!run || run.status !== 'running') return;
+    if (run?.status !== 'running' || operating.current) return;
+    operating.current = true;
     setBusy(true);
     try {
       await stopLocationTracking();
@@ -103,12 +119,14 @@ export function RunTrackingScreen() {
       console.error('Unable to pause GPS run tracking.', error);
       setErrorMessage('러닝을 일시 정지하지 못했어요. 다시 시도해 주세요.');
     } finally {
+      operating.current = false;
       setBusy(false);
     }
   };
 
   const resumeRun = async () => {
-    if (!run || run.status !== 'paused') return;
+    if (run?.status !== 'paused' || operating.current) return;
+    operating.current = true;
     setBusy(true);
     setMessage('');
     try {
@@ -123,20 +141,25 @@ export function RunTrackingScreen() {
         '러닝을 다시 시작하지 못했어요. 권한과 위치 설정을 확인해 주세요.',
       ));
     } finally {
+      operating.current = false;
       setBusy(false);
     }
   };
 
   const finishRun = async () => {
-    if (!run) return;
+    if (!run || operating.current) return;
+    operating.current = true;
     setBusy(true);
+    setErrorMessage(null);
     try {
       await stopLocationTracking();
       const completed = getActiveRunSnapshot().run ?? run;
-      const saved = await saveCompletedRun(toCompletedRun(completed), completed.ownerId ?? null);
+      const result = toCompletedRun(completed);
+      const saved = await saveCompletedRun(result, completed.ownerId ?? null);
       await clearActiveRun();
       setConfirmingFinish(false);
       setMessage(saved.message);
+      setCompletedRun(result);
       try { await exportHealthRun(toCompletedRun(completed)); }
       catch (error) {
         console.error('건강 앱 러닝 저장 실패', error);
@@ -146,6 +169,7 @@ export function RunTrackingScreen() {
       console.error('Unable to finish and save GPS run.', error);
       setErrorMessage('러닝을 저장하지 못했어요. 기록을 유지한 채 다시 시도해 주세요.');
     } finally {
+      operating.current = false;
       setBusy(false);
     }
   };
@@ -155,13 +179,17 @@ export function RunTrackingScreen() {
     : 0;
   const speedKmh = run ? run.currentSpeedMetersPerSecond * 3.6 : 0;
   const paceSecondsPerKm = run ? getCurrentPaceSecondsPerKm(run) : null;
+  const goalProgress = run ? runGoalProgress(run, now) : null;
+
+  if (completedRun) return <>
+    <RunCompletion run={completedRun} message={message} onDone={() => { setCompletedRun(null); setMessage(''); }} />
+    <PaceErrorDialog message={errorMessage} onClose={() => setErrorMessage(null)} />
+  </>;
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <BackHeader />
-      </View>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {run ? (
           <>
             <Text style={styles.eyebrow}>GPS RUN TRACKER</Text>
@@ -173,6 +201,19 @@ export function RunTrackingScreen() {
                 ? '화면을 잠가도 러닝 기록을 계속합니다.'
                 : 'GPS로 거리와 속도를 기록해요.'}
             </Text>
+          </>
+        ) : <>
+          <Text style={styles.eyebrow}>MAKE TODAY YOUR PACE</Text>
+          <Text style={styles.title}>오늘도, 나의 페이스로.</Text>
+          <Text style={styles.description}>기록보다 중요한 건, 시작하는 마음.</Text>
+        </>}
+      </View>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {run ? (
+          <>
+            {goalProgress ? <Text accessibilityLiveRegion="polite" style={styles.message}>
+              {goalProgress.reached ? `${goalProgress.label} 목표 달성! 기록은 계속돼요.` : `${goalProgress.label} 목표 · ${Math.floor(goalProgress.fraction * 100)}%`}
+            </Text> : null}
             <View style={styles.distanceCard}>
               <Text style={styles.metricLabel}>누적 거리</Text>
               <Text style={styles.distance}>
@@ -197,51 +238,61 @@ export function RunTrackingScreen() {
                   : `일시 정지됨 · 위치 ${run.routePoints.length}개`}
               </Text>
             </View>
-            {confirmingFinish ? (
-              <View style={styles.confirmCard}>
-                <Text style={styles.confirmTitle}>러닝을 종료하고 저장할까요?</Text>
-                <Text style={styles.confirmDescription}>기기에 먼저 보관하고, 로그인한 계정이 있으면 GPS 경로와 함께 서버에 저장해요.</Text>
-                <View style={styles.confirmActions}>
-                  <ActionButton label="계속 달리기" secondary disabled={busy} onPress={() => setConfirmingFinish(false)} />
-                  <ActionButton label="종료 및 저장" disabled={busy} onPress={finishRun} />
-                </View>
-              </View>
-            ) : (
-              <View style={styles.controls}>
-                {run.status === 'running' ? (
-                  <ActionButton label="일시 정지" secondary disabled={busy} onPress={pauseRun} />
-                ) : (
-                  <ActionButton label="다시 시작" disabled={busy} onPress={resumeRun} />
-                )}
-                <ActionButton
-                  label="러닝 종료"
-                  secondary
-                  disabled={busy}
-                  onPress={() => setConfirmingFinish(true)}
-                />
-              </View>
-            )}
           </>
         ) : (
-          <RunReadyView busy={busy} onStart={startRun} />
+          <RunReadyView>
+            <RunOptions goal={goal} voice={voice} disabled={busy} onGoal={setGoal} onVoice={setVoice} />
+          </RunReadyView>
         )}
+        {guidanceFailure ? <Text accessibilityLiveRegion="polite" style={styles.message}>{guidanceFailure}</Text> : null}
 
         {message ? (
           <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text>
         ) : snapshot.error ? (
           <Text accessibilityLiveRegion="polite" style={styles.message}>{snapshot.error}</Text>
         ) : null}
-        <Text style={styles.privacyNote}>
+        {run ? <Text style={styles.privacyNote}>
           GPS 경로는 종료 시 기기에 저장되고 로그인 계정에 동기화됩니다. 화면이 꺼진 동안에도 기록하려면
           위치 권한을 허용해야 합니다. 앱을 강제 종료하면 운영체제에 따라 기록이 중단될 수 있어요.
-        </Text>
+        </Text> : null}
       </ScrollView>
+      <SafeAreaView edges={['bottom']} style={styles.dock}>
+        <View style={styles.dockContent}>
+          {run ? <RunControls runStatus={run.status} busy={busy} confirming={confirmingFinish}
+            onPause={pauseRun} onResume={resumeRun} onFinish={finishRun}
+            onConfirm={() => setConfirmingFinish(true)} onCancel={() => setConfirmingFinish(false)} />
+            : <>
+              <ActionButton label={busy ? 'GPS 준비 중…' : '러닝 시작하기  →'} disabled={busy || !snapshot.loaded || Boolean(snapshot.error)}
+                onPress={startRun} />
+              <Text style={styles.dockCaption}>시작할 때 위치 권한과 GPS를 확인해요</Text>
+            </>}
+        </View>
+      </SafeAreaView>
       <PaceErrorDialog
         message={errorMessage}
         onClose={() => setErrorMessage(null)}
       />
     </SafeAreaView>
   );
+}
+
+function RunControls({ runStatus, busy, confirming, onPause, onResume, onFinish, onConfirm, onCancel }: Readonly<{
+  runStatus: 'running' | 'paused'; busy: boolean; confirming: boolean;
+  onPause: () => void; onResume: () => void; onFinish: () => void; onConfirm: () => void; onCancel: () => void;
+}>) {
+  if (confirming) return <>
+    <Text style={styles.confirmTitle}>러닝을 마치고 저장할까요?</Text>
+    <Text style={styles.confirmDescription}>기기에 먼저 보관하고 로그인 계정에 동기화해요.</Text>
+    <View style={styles.controls}>
+      <ActionButton label="돌아가기" secondary disabled={busy} onPress={onCancel} />
+      <ActionButton label={busy ? '저장 중…' : '종료 및 저장'} disabled={busy} onPress={onFinish} />
+    </View>
+  </>;
+  return <View style={styles.controls}>
+    <ActionButton label={runStatus === 'running' ? '일시 정지' : '다시 시작'} disabled={busy}
+      onPress={runStatus === 'running' ? onPause : onResume} />
+    <ActionButton label="러닝 종료" secondary disabled={busy} onPress={onConfirm} />
+  </View>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -284,34 +335,37 @@ function ActionButton({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.background },
-  header: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24 },
-  content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 36 },
+  header: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 16 },
+  content: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingBottom: 24 },
+  dock: { backgroundColor: C.background, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border },
+  dockContent: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 12, gap: 10 },
+  dockCaption: { color: C.subtle, fontSize: 11, textAlign: 'center' },
   eyebrow: { marginTop: 22, color: C.accent, fontSize: 9, fontWeight: '600', letterSpacing: 1.8 },
   title: { marginTop: 8, color: C.text, fontSize: 25, fontWeight: '700' },
-  description: { marginTop: 5, color: C.muted, fontSize: 11 },
-  distanceCard: { marginTop: 22, paddingVertical: 25, alignItems: 'center', borderRadius: 22, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
-  metricLabel: { color: C.muted, fontSize: 10 },
-  distance: { marginTop: 7, color: C.accent, fontSize: 55, lineHeight: 62, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  distanceUnit: { color: C.accent, fontSize: 15, fontWeight: '500' },
-  timer: { marginTop: 11, color: C.text, fontSize: 28, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  description: { marginTop: 7, color: C.muted, fontSize: 13, lineHeight: 21 },
+  distanceCard: { marginTop: 28, paddingVertical: 30, alignItems: 'center' },
+  metricLabel: { color: C.muted, fontSize: 12 },
+  distance: { marginTop: 9, color: C.accent, fontSize: 64, lineHeight: 78, fontWeight: '700', letterSpacing: -2, fontVariant: ['tabular-nums'] },
+  distanceUnit: { color: C.muted, fontSize: 18, fontWeight: '500', letterSpacing: 0 },
+  timer: { marginTop: 20, color: C.text, fontSize: 32, fontWeight: '600', fontVariant: ['tabular-nums'] },
   timerLabel: { marginTop: 3, color: C.subtle, fontSize: 9 },
   statsRow: { marginTop: 11, paddingVertical: 17, flexDirection: 'row', borderRadius: 17, backgroundColor: C.surface },
   metric: { flex: 1, alignItems: 'center', gap: 7 },
-  metricValue: { color: C.text, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  metricValue: { color: C.text, fontSize: 19, fontWeight: '600', fontVariant: ['tabular-nums'] },
   locationStatus: { marginTop: 17, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 7 },
   statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.subtle },
   statusActive: { backgroundColor: C.accent },
   locationStatusText: { color: C.muted, fontSize: 10 },
-  controls: { marginTop: 23, gap: 10 },
-  actionButton: { minWidth: 160, minHeight: 51, paddingHorizontal: 20, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: C.accent },
-  actionButtonText: { color: C.accentInk, fontSize: 12, fontWeight: '700' },
+  controls: { flexDirection: 'row', gap: 10 },
+  actionButton: { flexGrow: 1, flexBasis: 0, minHeight: 56, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: C.accent },
+  actionButtonText: { color: C.accentInk, fontSize: 16, fontWeight: '700' },
   secondaryButton: { backgroundColor: C.raised },
   secondaryButtonText: { color: C.text },
   disabledButton: { opacity: 0.5 },
   pressed: { opacity: 0.75 },
   confirmCard: { marginTop: 21, padding: 16, borderRadius: 17, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
-  confirmTitle: { color: C.text, fontSize: 12, fontWeight: '700' },
-  confirmDescription: { marginTop: 5, color: C.muted, fontSize: 9 },
+  confirmTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
+  confirmDescription: { color: C.muted, fontSize: 12, lineHeight: 19 },
   confirmActions: { marginTop: 13, gap: 8 },
   message: { marginTop: 13, color: C.accent, fontSize: 10, lineHeight: 16, textAlign: 'center' },
   privacyNote: { marginTop: 19, color: C.subtle, fontSize: 9, lineHeight: 15, textAlign: 'center' },

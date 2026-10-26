@@ -15,6 +15,7 @@ import { PaceConfirmDialog } from '@/components/pace-confirm-dialog';
 import { readActiveRun } from '@/data/active-run-store';
 import { getSessionState, useSession } from '@/features/auth/session-store';
 import { errorMessage as describeError } from '@/lib/api-transport';
+import { ProgressSummary } from '@/features/running/progress-summary';
 
 async function loadProfile() {
   const [weeklyGoalKm, me] = await Promise.all([
@@ -24,6 +25,7 @@ async function loadProfile() {
 }
 
 const menuItems = [
+  { label: '배지 · 개인 최고 기록', detail: '모은 성취와 나의 러닝 컬렉션', route: '/achievements' },
   { label: '앱 설정', detail: '알림, 거리 단위, 개인정보', route: '/settings' },
   { label: '계정 로그인', detail: 'Google · Apple 로그인', route: '/login' },
 ] as const;
@@ -109,6 +111,7 @@ function AccountProfile() {
           <Text style={styles.goalIconText}>›</Text>
         </View>
       </Pressable>
+      <ProgressSummary />
       <Text style={styles.sectionTitle}>내 메뉴</Text>
       <View style={styles.menuCard}>
         {menuItems.filter((item) => !session || item.route !== '/login').map((item, index) => (

@@ -55,6 +55,29 @@ PACE 앱(Expo/React Native)이 필요로 하는 백엔드 API, DB 테이블, 구
 - 수동 DB 스키마 적용과 백엔드 배포가 OTA보다 먼저입니다.
   배포 순서는 [README](../README.md#크루대결-api-배포-순서)를 따릅니다.
 
+### 러닝 성취·회고·공동 목표 계약
+
+모든 경로는 기존 API base 뒤에 붙이며 인증된 계정에 귀속됩니다.
+
+- `GET /users/me/progress`: `totalDistanceKm`, `totalRuns`, `weeklyDistanceKm`, `weeklyRuns`,
+  `weeklyGoalKm`, `representativeBadgeId`, `badges[]`, `personalBests[]`.
+  배지는 `{id,title,description,target,progress,earnedAt}`이고 미획득 시 `earnedAt:null`입니다.
+  최고 기록은 `{id,title,value,unit,achievedAt,runId}`입니다. `longest-run`(km)과
+  `fastest-1km`(seconds)를 제공하며 `achievedAt`은 해당 러닝의 종료 시각입니다.
+  1km는 연속 GPS 시각·누적 거리에서 양 끝 경계를 보간해 최단 실제 경과 시간을 구합니다.
+  30초 초과 공백·정확도 35m 초과·구간 속도 8m/s 초과 등은 구간을 끊고, 짧은 정지는 포함합니다.
+  밀리초 단위 비교에서 동률이면 먼저 완료한 기록을 유지합니다. 평균 페이스를 환산하지 않습니다.
+- `PUT /users/me/progress/representative-badge`의 `{badgeId:string|null}`로 획득한 대표 배지를 선택/해제합니다.
+  주간 목표는 새 저장소를 만들지 않고 기존 `PATCH /users/me/settings`의 `weeklyGoalMeters`를 재사용합니다.
+- `GET /runs/{runId}/reflection`: `{effort:null|'easy'|'moderate'|'hard',note:string}`.
+  `PUT`은 선택한 effort와 500자 이내 note를 보내며 본인의 동기화된 기록만 편집할 수 있습니다.
+- `GET /crews/{crewId}/goal`: `{month,targetKm,totalKm,canEdit,contributors:[{userId,nickname,distanceKm}]}`.
+  현재 크루 멤버만 조회하고 크루장만 `PUT`에 `{targetKm:1..10000}` 정수를 보냅니다.
+  한국 달력의 해당 월, 현재 멤버의 가입 후 시작한 러닝만 합산합니다.
+- 클라이언트는 API 실패를 빈 배지·저장 성공으로 대체하지 않습니다. 운영 DB에 백엔드의
+  `database/progress-schema.sql` 수동 적용 및 API 배포가 선행되어야 합니다.
+- 음성·이미지 공유용 네이티브 모듈 추가로 앱 런타임은 1.0.5이며 1.0.4용 OTA와 호환되지 않습니다.
+
 | 데이터 | 현재 위치 | 저장소 코드 | 백엔드 연결 후 |
 | --- | --- | --- | --- |
 | 완료한 러닝 기록 + GPS 경로 | 기기 (AsyncStorage `@pace/completed-runs`) | `src/data/completed-runs-repository.ts` | `GET/POST/DELETE /runs` |

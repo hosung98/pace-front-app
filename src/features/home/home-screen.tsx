@@ -17,6 +17,7 @@ import {
 } from '@/features/running/run-insights';
 import type { CompletedRun } from '@/features/running/types';
 import { DEFAULT_WEEKLY_GOAL_KM } from '@/features/running/weekly-goal';
+import { ProgressSummary } from '@/features/running/progress-summary';
 import { useFocusQuery } from '@/hooks/use-focus-query';
 import { formatDuration, formatKm, formatLongDate, formatPace } from '@/lib/format';
 
@@ -247,6 +248,7 @@ export function HomeScreen() {
             onStartRun={() => router.push('/run-tracking')}
             distanceKm={todayDistanceKm}
           />
+          <ProgressSummary />
 
           <View style={styles.section}>
             <SectionHeading title="이번 주 러닝" detail="목표 관리" />

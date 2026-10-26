@@ -9,6 +9,7 @@ export const STORAGE_KEYS = {
   onboarding: '@pace/onboarding-completed-v1',
   healthEnabled: '@pace/health-enabled-v1',
   permissionIntro: '@pace/permission-intro-v1',
+  runReflections: '@pace/run-reflections-v1',
 } as const;
 
 type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

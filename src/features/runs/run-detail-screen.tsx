@@ -18,6 +18,8 @@ import {
 
 import { toRouteCoordinates } from './route-geometry';
 import { RunRouteMap } from './run-route-map';
+import { RunReflection } from './run-reflection';
+import { RunShareCard } from './run-share-card';
 import { errorMessage } from '@/lib/api-transport';
 import { useSession } from '@/features/auth/session-store';
 import { PaceButton } from '@/components/pace-button';
@@ -124,6 +126,8 @@ function AccountRunDetail() {
         <Text style={styles.note}>
           {session ? '계정에 저장된 러닝과 GPS 경로입니다.' : '기기에 저장된 GPS 기록입니다.'}
         </Text>
+        <RunReflection key={`${userId ?? 'guest'}:${run.id}`} run={run} />
+        <RunShareCard run={run} />
         {supportsHealth ? <>
           <PaceButton label="Apple 건강에 저장 · 다시 시도" loading={exporting} variant="secondary"
             onPress={() => {

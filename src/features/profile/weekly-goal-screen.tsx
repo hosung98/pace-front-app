@@ -47,17 +47,17 @@ export function WeeklyGoalScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
-        <View style={styles.container}>
-        <BackHeader />
+      <View style={[styles.container, styles.header]}><BackHeader />
         <Text style={styles.eyebrow}>YOUR WEEKLY PACE</Text>
         <Text style={styles.title}>이번 주 목표를 정해요</Text>
         <Text style={styles.description}>
           무리하지 않는 거리부터 시작해 꾸준히 이어가 보세요.
         </Text>
-
+      </View>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.container}>
         {isLoading || loadErrorMessage ? (
           <PaceQueryState loading={isLoading} message={loadErrorMessage} onRetry={() => { void reload(); }} />
         ) : (
@@ -137,11 +137,12 @@ export function WeeklyGoalScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.background },
   scrollContent: { flexGrow: 1 },
+  header: { paddingBottom: 16 },
   container: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24 },
   eyebrow: { marginTop: 24, color: C.accent, fontSize: 9, fontWeight: '600', letterSpacing: 2 },
   title: { marginTop: 9, color: C.text, fontSize: 24, fontWeight: '700' },
   description: { marginTop: 6, color: C.muted, fontSize: 12, lineHeight: 18 },
-  goalCard: { marginTop: 30, padding: 22, alignItems: 'center', borderRadius: 20, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  goalCard: { marginTop: 12, padding: 22, alignItems: 'center', borderRadius: 20, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   goalLabel: { color: C.muted, fontSize: 11 },
   goalValueRow: { marginTop: 9, flexDirection: 'row', alignItems: 'baseline', gap: 7 },
   goalValue: { color: C.text, fontSize: 54, lineHeight: 64, fontWeight: '700', fontVariant: ['tabular-nums'] },
