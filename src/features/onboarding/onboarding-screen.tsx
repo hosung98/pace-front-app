@@ -60,7 +60,7 @@ export function OnboardingScreen() {
       setBusy(true);
       try {
         await completeOnboarding();
-        router.replace('/login');
+        router.replace('/permissions');
       } catch (error) {
         console.error('온보딩 완료 저장 실패', error);
         setFailure('시작 정보를 저장하지 못했어요. 다시 시도해 주세요.');

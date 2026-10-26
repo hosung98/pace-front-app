@@ -5,6 +5,8 @@ import {
   foregroundStyle,
   monospacedDigit,
   padding,
+  frame,
+  multilineTextAlignment,
 } from '@expo/ui/swift-ui/modifiers';
 import { createLiveActivity, type LiveActivityEnvironment } from 'expo-widgets';
 
@@ -33,12 +35,13 @@ const runActivityLayout = (props: RunActivityProps, environment: LiveActivityEnv
   const status = props.paused ? '일시 정지' : '러닝 중';
   const icon = props.paused ? 'pause.circle.fill' : 'figure.run';
 
-  const timer = (size: number) => (
+  const timer = (size: number, width: number) => (
     <Text
       timerInterval={{ lower: timerStart, upper: timerEnd }}
       countsDown={false}
       pauseTime={pauseTime}
-      modifiers={[font({ size, weight: 'bold' }), monospacedDigit(), foregroundStyle('#F4F5F0')]}
+      modifiers={[font({ size, weight: 'bold' }), monospacedDigit(), foregroundStyle('#F4F5F0'),
+        multilineTextAlignment('trailing'), frame({ width, alignment: 'trailing' })]}
     />
   );
 
@@ -60,7 +63,7 @@ const runActivityLayout = (props: RunActivityProps, environment: LiveActivityEnv
         </VStack>
         <Spacer />
         <VStack alignment="trailing" spacing={4}>
-          {timer(22)}
+          {timer(22, 116)}
           <Text modifiers={[font({ size: 12 }), monospacedDigit(), foregroundStyle(muted)]}>
             {`${props.pace} /km`}
           </Text>
@@ -75,7 +78,7 @@ const runActivityLayout = (props: RunActivityProps, environment: LiveActivityEnv
         </Text>
       </HStack>
     ),
-    compactTrailing: timer(13),
+    compactTrailing: timer(13, 62),
     minimal: <Image systemName={icon} color={accent} size={13} />,
     expandedLeading: (
       <VStack alignment="leading" spacing={2} modifiers={[padding({ leading: 4 })]}>
@@ -88,7 +91,7 @@ const runActivityLayout = (props: RunActivityProps, environment: LiveActivityEnv
     expandedTrailing: (
       <VStack alignment="trailing" spacing={2} modifiers={[padding({ trailing: 4 })]}>
         <Text modifiers={[font({ size: 12 }), foregroundStyle(muted)]}>시간</Text>
-        {timer(24)}
+        {timer(24, 126)}
       </VStack>
     ),
     expandedBottom: (

@@ -105,8 +105,6 @@ export function LoginScreen() {
                   styles.google,
                   pressed && styles.pressed,
                 ]}>
-                {Platform.OS === 'ios' && !session ? <AppleLoginButton disabled={busy}
-                  onPress={() => { void signIn(undefined, 'apple'); }} onError={appleError} /> : null}
                 <Text
                   style={[
                     styles.providerText,
@@ -116,6 +114,8 @@ export function LoginScreen() {
                 </Text>
               </Pressable>
             )}
+            {Platform.OS === 'ios' && !session ? <AppleLoginButton disabled={busy}
+              onPress={() => { void signIn(undefined, 'apple'); }} onError={appleError} /> : null}
             <Text
               accessibilityLiveRegion="polite"
               style={styles.statusMessage}>
@@ -138,8 +138,19 @@ export function LoginScreen() {
           <Text style={styles.legalNotice}>
             로그인하면 이 기기의 미연결 러닝 기록과 GPS 경로를 해당 계정의 서버에 전송해요.{' '}
             {APP_ENV === 'development' ? '개발 환경에서는 테스트용 서버를 사용해요. ' : ''}
-            정식 출시 전 이용약관·개인정보 처리방침이 제공될 예정이에요.
+            데이터 처리 내용을 확인한 후 이용해 주세요.
           </Text>
+          <View style={styles.legalLinks}>
+            <Pressable accessibilityRole="link" onPress={() => router.push('/privacy')} style={styles.legalLink}>
+              <Text style={styles.legalLinkText}>개인정보 처리방침</Text>
+            </Pressable>
+            <Pressable accessibilityRole="link" onPress={() => router.push('/terms')} style={styles.legalLink}>
+              <Text style={styles.legalLinkText}>이용약관</Text>
+            </Pressable>
+            <Pressable accessibilityRole="link" onPress={() => router.push('/support')} style={styles.legalLink}>
+              <Text style={styles.legalLinkText}>도움말 · 문의</Text>
+            </Pressable>
+          </View>
         </View>
       </ScrollView>
       <PaceErrorDialog message={failure} onClose={() => {
@@ -209,6 +220,7 @@ const styles = StyleSheet.create({
   },
   providerButton: {
     minHeight: 56,
+    paddingVertical: 16,
     paddingHorizontal: 20,
     borderRadius: 14,
     alignItems: 'center',
@@ -230,7 +242,11 @@ const styles = StyleSheet.create({
     color: C.subtle,
     fontSize: 11,
     textAlign: 'center',
+    lineHeight: 18,
   },
+  legalLinks: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
+  legalLink: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
+  legalLinkText: { color: C.muted, fontSize: 12, textDecorationLine: 'underline' },
   previewButton: {
     minHeight: 48,
     marginTop: 18,

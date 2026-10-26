@@ -10,19 +10,29 @@ function harness(os = 'ios') {
   const memory = new Map();
   const secure = new Map();
   const calls = [];
+  const timers = new Map();
+  let nextTimer = 0;
   const h = {
     memory, secure, calls, authentication: { success: true }, level: 1,
     authorization: true, sharing: 2, state: null, appleFailure: null,
     failWrite: false, failSecure: false, failHealth: false, available: true,
-    steps: null, workouts: [],
+    steps: null, workouts: [], authorize: null, readSteps: null,
+    expire: (milliseconds) => {
+      for (const [id, timer] of timers) if (timer.milliseconds === milliseconds) {
+        timers.delete(id); timer.callback();
+      }
+    },
   };
   const kit = {
     isHealthDataAvailable: () => h.available,
     AuthorizationStatus: { sharingAuthorized: 2 },
     WorkoutActivityType: { running: 37 },
-    requestAuthorization: async (options) => { calls.push(['permissions', options]); return h.authorization; },
+    requestAuthorization: async (options) => { calls.push(['permissions', options]); return h.authorize ? h.authorize() : h.authorization; },
     authorizationStatusFor: () => h.sharing,
-    queryStatisticsForQuantity: async (...args) => { calls.push(['steps', ...args]); return { sumQuantity: h.steps }; },
+    queryStatisticsForQuantity: async (...args) => {
+      calls.push(['steps', ...args]);
+      return h.readSteps ? h.readSteps() : { sumQuantity: h.steps };
+    },
     queryWorkoutSamples: async (options) => { calls.push(['workouts', options]); return h.workouts; },
     saveWorkoutSample: async (...args) => {
       calls.push(['save', ...args]);
@@ -87,6 +97,8 @@ function harness(os = 'ios') {
         return load(`${target}.ts`);
       },
       console, Date, Promise,
+      setTimeout: (callback, milliseconds) => { const id = ++nextTimer; timers.set(id, { callback, milliseconds }); return id; },
+      clearTimeout: (id) => timers.delete(id),
     }, { filename: file });
     return module.exports;
   }
@@ -113,6 +125,53 @@ test('온보딩 완료는 다시 로드해도 유지하고 실패·잘못된 저
   await assert.rejects(h.onboarding.completeOnboarding(), /disk full/);
   h.memory.set('@pace/onboarding-completed-v1', '"true"');
   await assert.rejects(h.onboarding.hasCompletedOnboarding(), /올바르지/);
+});
+
+test('권한 안내 완료는 온보딩과 별도로 한 번만 저장하고 손상·저장 실패를 전파한다', async () => {
+  const h = harness();
+  const preferences = h.load('data/permission-preferences');
+  await h.onboarding.completeOnboarding();
+  assert.equal(await preferences.hasSeenPermissionIntro(), false);
+  await preferences.completePermissionIntro();
+  assert.equal(await preferences.hasSeenPermissionIntro(), true);
+  h.failWrite = true;
+  await assert.rejects(preferences.completePermissionIntro(), /disk full/);
+  h.memory.set('@pace/permission-intro-v1', '1');
+  await assert.rejects(preferences.hasSeenPermissionIntro(), /올바르지/);
+});
+
+test('건강 권한 시간 초과는 연동 성공으로 저장되지 않고 늦은 응답도 성공 상태를 쓰지 않는다', async () => {
+  const h = harness();
+  let resolve;
+  h.authorize = () => new Promise((done) => { resolve = done; });
+  const request = h.health.connectHealth();
+  for (let i = 0; i < 20 && !resolve; i++) await Promise.resolve();
+  assert.ok(resolve);
+  await assert.rejects(h.health.connectHealth(), /진행 중/);
+  h.expire(60000);
+  await assert.rejects(request, /완료하지 못했/);
+  assert.equal(await h.health.isHealthConnected(), false);
+  resolve(true);
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  assert.equal(await h.health.isHealthConnected(), false);
+  h.authorize = null;
+  await h.health.connectHealth();
+  assert.equal(await h.health.isHealthConnected(), true);
+});
+
+test('건강 조회는 15초에 명시적으로 실패하며 연결 선호를 지우거나 빈 성공 결과로 바꾸지 않는다', async () => {
+  const h = harness();
+  await h.health.connectHealth();
+  h.readSteps = () => new Promise(() => {});
+  const query = h.health.readHealthSummary();
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  assert.ok(h.calls.some(([kind]) => kind === 'steps'));
+  h.expire(15000);
+  await assert.rejects(query, /조회가 지연/);
+  assert.equal(await h.health.isHealthConnected(), true);
+  h.readSteps = null;
+  const result = await h.health.readHealthSummary();
+  assert.equal(result.steps, null);
 });
 
 test('Apple 요청은 해시된 nonce·state를 사용하며 서버용 원본 nonce를 반환한다', async () => {

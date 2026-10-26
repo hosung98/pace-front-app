@@ -8,6 +8,7 @@ export const STORAGE_KEYS = {
   runSync: '@pace/run-sync-v1',
   onboarding: '@pace/onboarding-completed-v1',
   healthEnabled: '@pace/health-enabled-v1',
+  permissionIntro: '@pace/permission-intro-v1',
 } as const;
 
 type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

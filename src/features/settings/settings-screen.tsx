@@ -6,7 +6,7 @@ import { BackHeader } from '@/components/back-header';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { PaceQueryState } from '@/components/pace-feedback';
-import { PaceConfirmDialog } from '@/components/pace-confirm-dialog';
+import { PaceButton } from '@/components/pace-button';
 import { deleteAccount as deleteServerAccount, getMe, getSettings, patchSettings, type SettingsPatch } from '@/data/account-repository';
 import { readActiveRun } from '@/data/active-run-store';
 import { getSessionState, useSession } from '@/features/auth/session-store';
@@ -83,7 +83,7 @@ function AccountSettings() {
         <Text style={styles.sectionTitle}>보안 · 건강 연동</Text>
         <View style={styles.card}>
           <SettingSwitch title="Face ID · 기기 암호로 앱 잠금"
-            detail={supportsAppLock ? '기존 로그인 보호용이에요. 세션 만료 시 소셜 로그인이 필요해요.' : 'iPhone에서 사용할 수 있어요.'}
+            detail={supportsAppLock ? '앱 시작·5분 이상 이탈 후에만 인증해요. 기본은 꺼짐이에요.' : 'iPhone에서 사용할 수 있어요.'}
             value={lock.data} disabled={!session || !supportsAppLock || lockBusy || lock.isLoading || Boolean(lock.errorMessage)}
             onValueChange={(value) => {
               if (!session || lockBusy) return;
@@ -104,6 +104,19 @@ function AccountSettings() {
             </View>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
+        </View>
+        <Text style={styles.sectionTitle}>이용 안내</Text>
+        <View style={styles.card}>
+          {([
+            ['/permissions', '앱 권한 안내'],
+            ['/privacy', '개인정보 처리방침'],
+            ['/terms', '이용약관'],
+            ['/support', '도움말 · 문의 및 삭제 요청'],
+          ] as const).map(([route, label]) => <Pressable key={route} accessibilityRole="link"
+            style={styles.actionRow} onPress={() => router.push(route === '/permissions'
+              ? { pathname: route, params: { from: 'settings' } } : route)}>
+            <Text style={styles.settingTitle}>{label}</Text><Text style={styles.chevron}>›</Text>
+          </Pressable>)}
         </View>
         {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}
         {session && (isLoading || errorMessage) ? (
@@ -180,13 +193,16 @@ function AccountSettings() {
             <Text style={styles.chevron}>›</Text>
           </Pressable>
         </View>
+        {confirmDelete ? <View style={[styles.card, styles.deleteConfirmation]}>
+          <Text style={styles.settingTitle}>계정 삭제를 요청할까요?</Text>
+          <Text style={styles.settingDetail}>요청하면 로그인이 차단되고 서버에서 삭제 대기 처리됩니다. 물리 삭제·백업 보관은 개인정보 처리방침을 확인해 주세요. Apple 건강의 운동은 별도로 남으며 건강 앱에서 직접 삭제해야 해요.</Text>
+          <PaceButton label="취소" variant="secondary" disabled={busy} onPress={() => setConfirmDelete(false)} />
+          <PaceButton label="삭제 요청 진행" variant="danger" loading={busy} onPress={() => { void deleteAccount(); }} />
+        </View> : null}
         <Text style={styles.note}>{session ? '변경한 설정은 계정에 저장됩니다.' : '로그인 후 계정 설정과 탈퇴 기능을 사용할 수 있어요.'}</Text>
         </>
         )}
       </ScrollView>
-      <PaceConfirmDialog visible={confirmDelete} title="계정을 삭제할까요?"
-        message="계정과 서버에 저장된 러닝·GPS 경로가 영구 삭제됩니다. 이미 Apple 건강에 저장된 운동은 별도로 남으며 건강 앱에서 직접 삭제해야 해요. 이 작업은 되돌릴 수 없어요."
-        onCancel={() => setConfirmDelete(false)} onConfirm={() => { void deleteAccount(); }} />
     </SafeAreaView>
   );
 }
@@ -232,6 +248,7 @@ const styles = StyleSheet.create({
   description: { marginTop: 5, color: C.muted, fontSize: 12 },
   sectionTitle: { marginTop: 24, marginBottom: 10, color: C.text, fontSize: 14, fontWeight: '700' },
   card: { paddingHorizontal: 15, borderRadius: 18, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  deleteConfirmation: { paddingVertical: 18, marginTop: 14, gap: 14 },
   settingRow: { minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
   settingCopy: { flex: 1, gap: 5 },
   settingTitle: { color: C.text, fontSize: 11, fontWeight: '600' },

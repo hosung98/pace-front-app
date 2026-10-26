@@ -17,7 +17,9 @@ APIs rather than sample data; an empty account can create a crew or race room.
 - 온보딩 완료 여부를 기기에 저장하며, 이후 실행에서는 로그인 상태에 따라 홈 또는 로그인으로 이동합니다.
   기존 로그인 사용자는 온보딩 완료로 이관합니다. 로그아웃·탈퇴로 이 기기의 온보딩 상태를 초기화하지 않습니다.
   저장·조회 실패 시 오류와 재시도를 제공하며, 완료 CTA는 저장 중 중복 입력을 막습니다.
-- 온보딩 다음 화면에서 iOS·웹 Google 로그인, iOS Apple 로그인 또는 기기 모드를 선택합니다.
+- 온보딩 다음에는 권한 안내를 한 번 표시합니다. 위치·Apple 건강을 선택하거나 모두 건너뛸 수 있으며,
+  이후 iOS·웹 Google 로그인, iOS Apple 로그인 또는 기기 모드를 선택합니다.
+  기존 설치도 새로운 권한 안내만 한 번 표시하며 온보딩은 반복하지 않습니다.
   카카오 로그인과 Android Google 로그인은 아직 연결하지 않았습니다.
   Google과 Apple은 이메일이 같아도 별개의 PACE 계정이며 자동 병합하지 않습니다.
 - The dashboard at `/main` shows device or account metrics. Starting a run opens native
@@ -29,7 +31,7 @@ APIs rather than sample data; an empty account can create a crew or race room.
   statistics, crew, and profile. Switching tabs does not add a back-stack
   entry. App settings and run details are pushed as sub-screens with a back
   affordance; top-level tabs do not need one.
-- Tab titles remain fixed while the screen content scrolls.
+- The brand header stays fixed; tab titles scroll with content to preserve space on small phones.
 - The crew tab has two segments. **Crew** shows weekly/monthly crew distance
   rankings, crew detail (member distances, invite code), create, join by invite
   code or request, request approval/rejection, leadership transfer, and leave
@@ -113,7 +115,9 @@ Expo Go, 웹, TypeScript 검사만으로 Apple 로그인·Face ID·HealthKit의 
 
 - 설정의 **Face ID · 기기 암호로 앱 잠금**에서 계정별로 켤 수 있습니다.
   설정 변경 때도 기기 인증을 요구하고, 설정은 SecureStore에 보관합니다.
-- 앱 시작과 비활성화 후 복귀를 보호합니다. 최초 잠금 해제 전에는 보호된 화면을 마운트하지 않고,
+- 앱 시작과 **백그라운드 5분 이상** 이탈 후 복귀를 보호합니다. 시스템 권한창의 inactive나
+  5분 미만 앱 전환만으로 재인증하지 않습니다. 비활성 상태에서는 프라이버시 커버를 사용합니다.
+  최초 잠금 해제 전에는 보호된 화면을 마운트하지 않고,
   복귀 시에는 기존 화면 위를 가려 진행 중인 GPS 기록을 중단하지 않습니다.
   인증창 자체의 앱 상태 변화는 재잠금 루프를 만들지 않습니다.
 - Face ID/Touch ID 실패 시 iOS 기기 암호를 허용합니다. 별도 PACE PIN을 만들거나 저장하지 않습니다.
@@ -123,6 +127,11 @@ Expo Go, 웹, TypeScript 검사만으로 Apple 로그인·Face ID·HealthKit의 
 ### Apple 건강
 
 - iPhone 전용, 명시적 동의 후 연동합니다. 서버 설정 API가 실패해도 로컬 보안·건강 메뉴는 접근할 수 있습니다.
+  화면 안의 동의 버튼에서 직접 시스템 권한을 요청하며, RN 확인 모달과 네이티브 권한창이 겹치지 않습니다.
+  권한 요청은 60초, 모듈 로드·조회·저장은 각각 15초 후 명시적 오류·재시도를 제공합니다.
+  시간 초과는 네이티브 요청을 취소하지 않습니다. 미완료 권한 요청 중 중복 요청을 차단하며,
+  늦은 완료를 연동 성공으로 저장하지 않습니다. 권한창을 완료한 뒤 다시 시도하고,
+  창이 없다면 앱을 종료 후 재실행합니다. 저장 재시도는 동일 sync identifier를 사용합니다.
 - 읽기: **오늘 걸음 수**, **최근 30일 운동 최대 20개**. 원본과 조회 결과는 메모리에서만 사용하며
   PACE 서버 업로드, PACE 러닝 자동 생성, 크루·대결 순위 반영을 하지 않습니다.
 - 쓰기: 연동 후 완료한 PACE 러닝을 건강 앱에 자동 저장합니다. 러닝 상세에서 기존 기록 저장·실패 재시도가 가능합니다.
@@ -139,6 +148,21 @@ Expo Go, 웹, TypeScript 검사만으로 Apple 로그인·Face ID·HealthKit의 
 - 네이티브 HealthKit 연동은 `@kingstinct/react-native-healthkit` + Nitro Modules를 사용합니다.
   Expo SDK 57용 Apple/생체 인증 모듈과 config plugin이 권한 문구·capability를 생성합니다.
   HealthKit background delivery는 사용하지 않습니다.
+
+### 권한·법적 안내와 공개 전 확인
+
+- `/permissions`는 기기별 완료 상태를 온보딩과 별도로 저장합니다. 명시적으로 위치 버튼을 누를 때만
+  foreground 권한을 요청하고, background 권한은 기존 러닝 시작 흐름에서 처리합니다.
+  건너뛰기도 완료로 저장하며 앱 설정에서 언제든 다시 열 수 있습니다. Face ID는 로그인 후 별도 opt-in입니다.
+- 로그인 화면과 설정에서 개인정보 처리방침·이용약관을, 설정에서 도움말·삭제 요청 안내를 제공합니다.
+  운영자 **김호성**, 문의 **hosung0806@gmail.com**을 사용합니다.
+- **현재 정책은 테스트 서비스 안내 초안입니다.** 실제 서버는 탈퇴를 삭제 대기로 전환하고 토큰을
+  폐기하므로 즉시 완전 삭제로 안내하지 않습니다. 정식 공개 전 물리 삭제 절차·실제 보관기간·로그·백업,
+  서버 소재지·위탁 업체·국외 이전 고지를 확정하고 문서를 법률 검토해야 합니다.
+  이 화면을 추가한 것만으로 법적 요건이나 App Store 공개용 정책 URL 준비가 완료되지는 않습니다.
+- Google/Apple 버튼은 별개의 터치 영역입니다. 크루의 내 행은 카드 여백 없이 전체 연두색으로 표시하며,
+  빈 랭킹에는 내부 여백을 둡니다. 기록을 포함한 탭 제목은 콘텐츠와 함께 스크롤합니다.
+  Live Activity 타이머는 표시 영역별 폭과 오른쪽 정렬을 지정합니다.
 
 ### 검증 및 실제 기기 확인 항목
 

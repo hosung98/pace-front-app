@@ -131,20 +131,20 @@ export function CrewSection() {
               crew.isMine && styles.rankRowMine,
               pressed && styles.pressed,
             ]}>
-            <Text style={[styles.rankNumber, crew.rank <= 3 && styles.rankTop]}>{crew.rank}</Text>
+            <Text style={[styles.rankNumber, crew.rank <= 3 && styles.rankTop, crew.isMine && styles.mineText]}>{crew.rank}</Text>
             <View style={styles.rankBody}>
               <View style={styles.rankNameRow}>
-                <Text style={styles.rankName} numberOfLines={1}>{crew.name}</Text>
+                <Text style={[styles.rankName, crew.isMine && styles.mineText]} numberOfLines={1}>{crew.name}</Text>
                 {crew.isMine ? <Text style={styles.mineTag}>내 크루</Text> : null}
               </View>
-              <Text style={styles.rankRegion} numberOfLines={1}>{formatRegion(crew.region)}</Text>
-              <View style={styles.rankBarTrack}>
-                <View style={[styles.rankBarFill, { width: `${(crew.distanceMeters / topDistance) * 100}%` }]} />
+              <Text style={[styles.rankRegion, crew.isMine && styles.mineText]} numberOfLines={1}>{formatRegion(crew.region)}</Text>
+              <View style={[styles.rankBarTrack, crew.isMine && styles.mineTrack]}>
+                <View style={[styles.rankBarFill, crew.isMine && styles.mineFill, { width: `${(crew.distanceMeters / topDistance) * 100}%` }]} />
               </View>
             </View>
             <View style={styles.rankValue}>
-              <Text style={styles.rankKm}>{formatKm(crew.distanceMeters, 1)}</Text>
-              <Text style={styles.rankMeta}>{crew.memberCount}명</Text>
+              <Text style={[styles.rankKm, crew.isMine && styles.mineText]}>{formatKm(crew.distanceMeters, 1)}</Text>
+              <Text style={[styles.rankMeta, crew.isMine && styles.mineText]}>{crew.memberCount}명</Text>
             </View>
           </Pressable>
         ))}
@@ -154,7 +154,7 @@ export function CrewSection() {
 }
 
 const styles = StyleSheet.create({
-  emptyRanking: { paddingVertical: 20 },
+  emptyRanking: { padding: 20 },
   pressed: { opacity: 0.8 },
   myCrewCard: {
     marginTop: 14,
@@ -181,17 +181,20 @@ const styles = StyleSheet.create({
   rankingHeader: { marginTop: 26, marginBottom: 10, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   sectionTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
   sectionCaption: { color: C.subtle, fontSize: 10 },
-  rankingCard: { paddingVertical: 6, paddingHorizontal: 0, overflow: 'hidden' },
+  rankingCard: { paddingVertical: 0, paddingHorizontal: 0, overflow: 'hidden' },
   rankRow: { minHeight: 64, paddingHorizontal: 17, flexDirection: 'row', alignItems: 'center', gap: 13 },
   rankRowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border },
-  rankRowMine: { backgroundColor: '#1C2117' },
+  rankRowMine: { backgroundColor: C.accent },
+  mineText: { color: C.accentInk },
+  mineTrack: { backgroundColor: '#A4BD56' },
+  mineFill: { backgroundColor: C.accentInk },
   rankNumber: { width: 20, color: C.subtle, fontSize: 15, fontWeight: '700', textAlign: 'center' },
   rankTop: { color: C.accent },
   rankBody: { flex: 1, gap: 5 },
   rankRegion: { marginTop: -2, color: C.subtle, fontSize: 10 },
   rankNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   rankName: { flexShrink: 1, color: C.text, fontSize: 13, fontWeight: '600' },
-  mineTag: { color: C.accent, fontSize: 9, fontWeight: '700' },
+  mineTag: { color: C.accentInk, fontSize: 9, fontWeight: '700' },
   rankBarTrack: { height: 4, borderRadius: 2, backgroundColor: C.raised },
   rankBarFill: { height: 4, borderRadius: 2, backgroundColor: C.accent },
   rankValue: { minWidth: 54, alignItems: 'flex-end' },

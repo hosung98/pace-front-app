@@ -174,26 +174,26 @@ export function CrewDetailScreen() {
         <Text style={styles.sectionTitle}>멤버별 거리</Text>
         <View style={[styles.card, styles.memberCard]}>
           {detail.members.length === 0 ? (
-            <Text style={styles.cardCaption}>아직 멤버가 없어요.</Text>
+            <Text style={[styles.cardCaption, { padding: 18 }]}>아직 멤버가 없어요.</Text>
           ) : detail.members.map((member, index) => (
             <View key={member.userId} style={[styles.memberRow, index > 0 && styles.memberBorder, member.isMe && styles.memberMine]}>
-              <Text style={[styles.memberRank, index < 3 && styles.memberRankTop]}>{index + 1}</Text>
+              <Text style={[styles.memberRank, index < 3 && styles.memberRankTop, member.isMe && styles.mineText]}>{index + 1}</Text>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>{member.nickname.slice(0, 1)}</Text>
               </View>
               <View style={styles.memberBody}>
                 <View style={styles.memberNameRow}>
-                  <Text style={styles.memberName}>{member.nickname}</Text>
-                  {member.role === 'leader' ? <Text style={styles.leaderTag}>크루장</Text> : null}
+                  <Text style={[styles.memberName, member.isMe && styles.mineText]}>{member.nickname}</Text>
+                  {member.role === 'leader' ? <Text style={[styles.leaderTag, member.isMe && styles.mineText]}>크루장</Text> : null}
                   {member.isMe ? <Text style={styles.meTag}>나</Text> : null}
                 </View>
-                <View style={styles.barTrack}>
-                  <View style={[styles.barFill, { width: `${(member.distanceMeters / topDistance) * 100}%` }]} />
+                <View style={[styles.barTrack, member.isMe && styles.mineTrack]}>
+                  <View style={[styles.barFill, member.isMe && styles.mineFill, { width: `${(member.distanceMeters / topDistance) * 100}%` }]} />
                 </View>
               </View>
               <View style={styles.memberValue}>
-                <Text style={styles.memberKm}>{formatKm(member.distanceMeters, 1)}<Text style={styles.memberUnit}> km</Text></Text>
-                <Text style={styles.memberRuns}>{member.runCount}회</Text>
+                <Text style={[styles.memberKm, member.isMe && styles.mineText]}>{formatKm(member.distanceMeters, 1)}<Text style={[styles.memberUnit, member.isMe && styles.mineText]}> km</Text></Text>
+                <Text style={[styles.memberRuns, member.isMe && styles.mineText]}>{member.runCount}회</Text>
               </View>
             </View>
           ))}
@@ -294,10 +294,13 @@ const styles = StyleSheet.create({
   requestText: { color: C.text, fontSize: 13 },
   requestCount: { color: C.accent, fontSize: 13, fontWeight: '700' },
   sectionTitle: { marginTop: 26, color: C.text, fontSize: 16, fontWeight: '700' },
-  memberCard: { paddingVertical: 4, paddingHorizontal: 0, overflow: 'hidden' },
+  memberCard: { paddingVertical: 0, paddingHorizontal: 0, overflow: 'hidden' },
   memberRow: { minHeight: 62, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 11 },
   memberBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border },
-  memberMine: { backgroundColor: '#1C2117' },
+  memberMine: { backgroundColor: C.accent },
+  mineText: { color: C.accentInk },
+  mineTrack: { backgroundColor: '#A4BD56' },
+  mineFill: { backgroundColor: C.accentInk },
   memberRank: { width: 16, color: C.subtle, fontSize: 13, fontWeight: '700', textAlign: 'center' },
   memberRankTop: { color: C.accent },
   avatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: C.raised },

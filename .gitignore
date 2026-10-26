@@ -33,6 +33,7 @@ yarn-error.*
 # local env files / secrets (public repo — never commit these)
 .env
 .env.*
+PACE-Apple-Server.env
 !.env.example
 credentials.json
 google-services.json

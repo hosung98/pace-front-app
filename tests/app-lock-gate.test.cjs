@@ -11,7 +11,7 @@ function gateHarness({ enabled = true, supported = true } = {}) {
   let cursor = 0;
   const effects = [];
   let stateListener;
-  const h = { enabled, readFailure: false, authFailure: false, authPrompt: false, onAuthenticate: null };
+  const h = { enabled, readFailure: false, authFailure: false, authPrompt: false, onAuthenticate: null, now: 0 };
   const jsx = (type, props, key) => ({ type, props: props ?? {}, key });
   const react = {
     useState(initial) {
@@ -70,7 +70,7 @@ function gateHarness({ enabled = true, supported = true } = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   vm.runInNewContext(code, {
-    module, exports: module.exports, console: { error() {} },
+    module, exports: module.exports, console: { error() {} }, Date: { now: () => h.now },
     require: (name) => {
       if (!(name in mocks)) throw new Error(`Unexpected import: ${name}`);
       return mocks[name];
@@ -135,7 +135,7 @@ test('인증 취소는 잠금을 유지하고 자체 인증창의 inactive 이�
   assert.equal(find(h.render(), 'Modal').props.visible, false);
 });
 
-test('백그라운드에서는 잠금을 덮되 기존 러닝 화면을 언마운트하지 않고 복귀해도 인증을 요구한다', async () => {
+test('백그라운드에서는 프라이버시 커버를 덮고 5분 이상 복귀 시만 인증하며 러닝을 유지한다', async () => {
   const h = gateHarness();
   h.render();
   await settle();
@@ -143,13 +143,55 @@ test('백그라운드에서는 잠금을 덮되 기존 러닝 화면을 언마�
   await settle();
   h.changeState('background');
   let tree = h.render();
-  assert.equal(find(tree, 'Modal').props.visible, true);
+  assert.equal(find(tree, 'Modal').props.visible, false);
+  assert.ok(tree.props.children[1]);
   assert.equal(tree.props.children[0], 'protected-screen');
+  h.now = 300000;
   h.changeState('active');
   await settle();
   tree = h.render();
   assert.equal(find(tree, 'Modal').props.visible, true);
   assert.equal(tree.props.children[0], 'protected-screen');
+});
+
+test('299999ms 백그라운드와 시스템 inactive 권한창은 재인증을 요구하지 않는다', async () => {
+  const h = gateHarness();
+  h.render();
+  await settle();
+  find(h.render(), 'PaceButton').props.onPress();
+  await settle();
+  h.changeState('background');
+  h.now = 299999;
+  h.changeState('active');
+  await settle();
+  assert.equal(find(h.render(), 'Modal').props.visible, false);
+  assert.equal(h.render().props.children[1], null);
+  h.changeState('inactive');
+  assert.ok(h.render().props.children[1]);
+  h.now += 600000;
+  h.changeState('active');
+  await settle();
+  assert.equal(find(h.render(), 'Modal').props.visible, false);
+});
+
+test('5분 뒤 인증을 취소하면 짧은 추가 앱 전환으로 잠금이 풀리지 않는다', async () => {
+  const h = gateHarness();
+  h.render();
+  await settle();
+  find(h.render(), 'PaceButton').props.onPress();
+  await settle();
+  h.changeState('background');
+  h.now = 300000;
+  h.changeState('active');
+  await settle();
+  h.authFailure = true;
+  find(h.render(), 'PaceButton').props.onPress();
+  await settle();
+  h.changeState('background');
+  h.now += 1000;
+  h.changeState('active');
+  await settle();
+  assert.equal(find(h.render(), 'Modal').props.visible, true);
 });
 
 test('설정 조회 실패는 fail-closed이고 재시도 후에만 잠금 설정을 판단한다', async () => {
