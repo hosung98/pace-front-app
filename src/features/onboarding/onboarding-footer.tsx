@@ -12,6 +12,7 @@ type OnboardingFooterProps = {
   onSelectPage: (page: number) => void;
   onAdvance: () => void;
   busy?: boolean;
+  finishLabel?: string;
 };
 
 export function OnboardingFooter({
@@ -21,6 +22,7 @@ export function OnboardingFooter({
   onSelectPage,
   onAdvance,
   busy = false,
+  finishLabel = '내 페이스로 시작하기',
 }: OnboardingFooterProps) {
   return (
     <View style={[styles.footer, wide && styles.wideFooter]}>
@@ -52,7 +54,7 @@ export function OnboardingFooter({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
-            isLastSlide ? '앱 권한 안내로 이동' : '다음 온보딩'
+            isLastSlide ? finishLabel : '다음 온보딩'
           }
           onPress={onAdvance}
           disabled={busy}
@@ -67,7 +69,7 @@ export function OnboardingFooter({
               styles.nextText,
               isLastSlide && styles.replayText,
             ]}>
-            {busy ? '시작 정보 저장 중…' : isLastSlide ? '내 페이스로 시작하기' : '다음'}
+            {busy ? '시작 정보 저장 중…' : isLastSlide ? finishLabel : '다음'}
           </Text>
           <Text
             style={[

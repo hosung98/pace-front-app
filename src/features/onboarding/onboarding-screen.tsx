@@ -20,8 +20,12 @@ import { OnboardingHeader } from './onboarding-header';
 import { OnboardingSlideContent } from './onboarding-slide-content';
 import { useOnboardingPager } from './use-onboarding-pager';
 
-export function OnboardingScreen() {
+export function OnboardingScreen({ replay = false }: Readonly<{ replay?: boolean }> = {}) {
   const router = useRouter();
+  const closeReplay = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/settings');
+  };
   const saving = useRef(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -56,6 +60,7 @@ export function OnboardingScreen() {
   const handleAdvance = async () => {
     if (saving.current) return;
     if (isLastSlide) {
+      if (replay) { closeReplay(); return; }
       saving.current = true;
       setBusy(true);
       try {
@@ -83,6 +88,7 @@ export function OnboardingScreen() {
         <OnboardingHeader
           isLastSlide={isLastSlide}
           onSkip={skipToLastPage}
+          onClose={replay ? closeReplay : undefined}
         />
 
         <View
@@ -139,6 +145,7 @@ export function OnboardingScreen() {
           wide={isWideLayout}
           onSelectPage={setPage}
           onAdvance={() => { void handleAdvance(); }}
+          finishLabel={replay ? '돌아가기' : undefined}
         />
       </View>
       <PaceErrorDialog message={failure} onClose={() => setFailure(null)} />

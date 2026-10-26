@@ -4,17 +4,19 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Text as ProviderText,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 
 import { BackHeader } from '@/components/back-header';
 import { PaceMark } from '@/components/pace-brand';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { PaceErrorDialog } from '@/components/pace-feedback';
-import { API_BASE_URL, APP_ENV } from '@/constants/api';
+import { API_BASE_URL } from '@/constants/api';
 import { claimGuestRuns, syncCompletedRuns } from '@/data/completed-runs-repository';
 import { readActiveRun } from '@/data/active-run-store';
 import { errorMessage, requestJson } from '@/lib/api-transport';
@@ -83,10 +85,9 @@ export function LoginScreen() {
             <View style={styles.markFrame}>
               <PaceMark size={36} />
             </View>
-            <Text style={styles.eyebrow}>YOUR PACE, YOUR WAY</Text>
             <Text style={styles.title}>나만의 페이스로,{'\n'}함께 달려요.</Text>
             <Text style={styles.description}>
-              소셜 계정으로 로그인하고 러닝 기록을 이어가세요.
+              로그인하고 러닝 기록을 이어가세요.
             </Text>
           </View>
 
@@ -105,22 +106,19 @@ export function LoginScreen() {
                   styles.google,
                   pressed && styles.pressed,
                 ]}>
-                <Text
+                <Image source={require('@/assets/images/google-logo.png')} style={styles.providerIcon}
+                  contentFit="contain" accessible={false} />
+                <ProviderText
                   style={[
                     styles.providerText,
                     styles.googleText,
                   ]}>
                   {busy ? '로그인 중…' : 'Google로 계속하기'}
-                </Text>
+                </ProviderText>
               </Pressable>
             )}
             {Platform.OS === 'ios' && !session ? <AppleLoginButton disabled={busy}
               onPress={() => { void signIn(undefined, 'apple'); }} onError={appleError} /> : null}
-            <Text
-              accessibilityLiveRegion="polite"
-              style={styles.statusMessage}>
-              Google은 iOS·웹, Apple은 iOS에서 지원해요.{'\n'}다른 소셜 계정은 별개의 PACE 계정으로 가입돼요.
-            </Text>
           </View>
 
           <Pressable
@@ -131,14 +129,11 @@ export function LoginScreen() {
               styles.previewButton,
               pressed && styles.pressed,
             ]}>
-            <Text style={styles.previewButtonText}>{session ? '메인 화면으로' : '로그인 없이 기기에서 사용하기'}</Text>
-            <Text style={styles.previewButtonArrow}>→</Text>
+            <Text style={styles.previewButtonText}>{session ? '메인 화면으로' : '로그인 없이 시작하기'}</Text>
           </Pressable>
 
           <Text style={styles.legalNotice}>
-            로그인하면 이 기기의 미연결 러닝 기록과 GPS 경로를 해당 계정의 서버에 전송해요.{' '}
-            {APP_ENV === 'development' ? '개발 환경에서는 테스트용 서버를 사용해요. ' : ''}
-            데이터 처리 내용을 확인한 후 이용해 주세요.
+            로그인 시 기기 러닝·GPS 경로가 해당 계정에 동기화돼요.{'\n'}Google과 Apple 계정은 각각 별도로 관리돼요.
           </Text>
           <View style={styles.legalLinks}>
             <Pressable accessibilityRole="link" onPress={() => router.push('/privacy')} style={styles.legalLink}>
@@ -179,13 +174,13 @@ const styles = StyleSheet.create({
   },
   intro: {
     alignItems: 'center',
-    paddingTop: 48,
-    paddingBottom: 42,
+    paddingTop: 32,
+    paddingBottom: 32,
   },
   markFrame: {
     width: 72,
     height: 72,
-    marginBottom: 28,
+    marginBottom: 8,
     borderRadius: 24,
     backgroundColor: C.surface,
     flexDirection: 'row',
@@ -193,18 +188,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 5,
   },
-  eyebrow: {
-    color: C.accent,
-    fontSize: 9,
-    fontWeight: '600',
-    letterSpacing: 2.4,
-  },
   title: {
     marginTop: 16,
     color: C.text,
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '700',
-    lineHeight: 43,
+    lineHeight: 39,
     letterSpacing: -1.2,
     textAlign: 'center',
   },
@@ -219,53 +208,44 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   providerButton: {
-    minHeight: 56,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 14,
+    minHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   providerText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 19,
+    fontWeight: '400',
   },
+  providerIcon: { width: 20, height: 20 },
   google: {
     backgroundColor: '#F4F5F0',
   },
   googleText: {
     color: '#202124',
   },
-  statusMessage: {
-    minHeight: 18,
-    marginTop: 6,
-    color: C.subtle,
-    fontSize: 11,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  legalLinks: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
-  legalLink: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
-  legalLinkText: { color: C.muted, fontSize: 12, textDecorationLine: 'underline' },
+  legalLinks: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 8 },
+  legalLink: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
+  legalLinkText: { color: C.muted, fontSize: 11 },
   previewButton: {
     minHeight: 48,
-    marginTop: 18,
+    marginTop: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   previewButtonText: {
-    color: C.accent,
+    color: C.muted,
     fontSize: 13,
     fontWeight: '600',
   },
-  previewButtonArrow: {
-    color: C.accent,
-    fontSize: 17,
-  },
   legalNotice: {
-    marginTop: 32,
+    marginTop: 24,
     color: C.subtle,
     fontSize: 10,
     lineHeight: 16,

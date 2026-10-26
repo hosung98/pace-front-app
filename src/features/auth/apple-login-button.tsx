@@ -20,7 +20,7 @@ export function AppleLoginButton({ disabled, onPress, onError }: Readonly<{
     <AppleAuthentication.AppleAuthenticationButton
       buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
       buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-      cornerRadius={14} style={{ width: '100%', height: 56, opacity: disabled ? 0.4 : 1 }}
+      cornerRadius={12} style={{ width: '100%', height: 44, opacity: disabled ? 0.4 : 1 }}
       onPress={onPress} />
   </View>;
 }

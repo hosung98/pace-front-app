@@ -109,6 +109,7 @@ function AccountSettings() {
         <View style={styles.card}>
           {([
             ['/permissions', '앱 권한 안내'],
+            ['/onboarding', '온보딩 다시 보기'],
             ['/privacy', '개인정보 처리방침'],
             ['/terms', '이용약관'],
             ['/support', '도움말 · 문의 및 삭제 요청'],
@@ -251,8 +252,8 @@ const styles = StyleSheet.create({
   deleteConfirmation: { paddingVertical: 18, marginTop: 14, gap: 14 },
   settingRow: { minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
   settingCopy: { flex: 1, gap: 5 },
-  settingTitle: { color: C.text, fontSize: 11, fontWeight: '600' },
-  settingDetail: { color: C.subtle, fontSize: 9, lineHeight: 14 },
+  settingTitle: { color: C.text, fontSize: 14, fontWeight: '600' },
+  settingDetail: { color: C.muted, fontSize: 12, lineHeight: 18 },
   switchTrack: { width: 46, height: 28, padding: 3, flexShrink: 0, justifyContent: 'center', borderRadius: 14, backgroundColor: C.raised },
   switchTrackActive: { backgroundColor: '#718A35' },
   switchThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#D0D2CC', transform: [{ translateX: 0 }] },
@@ -269,7 +270,7 @@ const styles = StyleSheet.create({
   unitTextActive: { color: C.accent, fontWeight: '600' },
   unitCode: { color: C.subtle, fontSize: 10, textTransform: 'uppercase' },
   actionRow: { minHeight: 66, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  actionCopy: { gap: 5 },
+  actionCopy: { flex: 1, gap: 5, paddingVertical: 14, paddingRight: 12 },
   chevron: { color: C.subtle, fontSize: 22 },
   message: { marginTop: 10, color: C.muted, fontSize: 10, lineHeight: 16 },
   note: { marginTop: 19, color: C.subtle, fontSize: 9, lineHeight: 15, textAlign: 'center' },

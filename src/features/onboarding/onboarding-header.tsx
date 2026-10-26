@@ -7,16 +7,21 @@ import { PaceColors as C } from '@/constants/pace';
 type OnboardingHeaderProps = {
   isLastSlide: boolean;
   onSkip: () => void;
+  onClose?: () => void;
 };
 
 export function OnboardingHeader({
   isLastSlide,
   onSkip,
+  onClose,
 }: OnboardingHeaderProps) {
   return (
     <View style={styles.header}>
       <PaceBrand />
-      {isLastSlide ? (
+      {onClose ? <Pressable accessibilityRole="button" accessibilityLabel="온보딩 닫기"
+        onPress={onClose} style={styles.textButton}>
+        <Text style={styles.skipText}>닫기</Text>
+      </Pressable> : isLastSlide ? (
         <View style={styles.headerNote}>
           <View style={styles.tinyDot} />
           <Text style={styles.headerNoteText}>YOUR PACE, YOUR WAY</Text>
