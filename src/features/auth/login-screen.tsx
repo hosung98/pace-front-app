@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -21,6 +21,8 @@ import { errorMessage, requestJson } from '@/lib/api-transport';
 import { googleIdToken } from './google-login';
 import { GoogleWebButton } from './google-web-button';
 import { acceptSession, useSession, type AuthTokens } from './session-store';
+import { appleCredential } from './apple-login';
+import { AppleLoginButton } from './apple-login-button';
 
 export function LoginScreen() {
   const router = useRouter();
@@ -28,19 +30,27 @@ export function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const signingIn = useRef(false);
-  const signIn = async (webIdToken?: string) => {
+  const appleError = useCallback((error: unknown) => {
+    console.error('Apple 로그인 지원 확인 실패', error);
+    setFailure('Apple 로그인을 사용할 수 있는지 확인하지 못했어요.');
+  }, []);
+  const signIn = async (webIdToken?: string, provider: 'google' | 'apple' = 'google') => {
     if (signingIn.current) return;
     signingIn.current = true;
     setBusy(true);
     try {
       if (await readActiveRun()) throw new Error('러닝을 종료하고 저장한 뒤 로그인해 주세요.');
       if (!session) {
-        const idToken = webIdToken ?? await googleIdToken();
-        if (!idToken) return;
-        const tokens = await requestJson<AuthTokens>(API_BASE_URL, '/auth/google', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken }),
+        const apple = provider === 'apple' ? await appleCredential() : null;
+        if (provider === 'apple' && !apple) return;
+        const credential = apple
+          ? { idToken: apple.idToken, nonce: apple.nonce, nickname: apple.nickname }
+          : { idToken: webIdToken ?? await googleIdToken() };
+        if (!credential?.idToken) return;
+        const tokens = await requestJson<AuthTokens>(API_BASE_URL, `/auth/${provider}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credential),
         });
-        await acceptSession(tokens);
+        await acceptSession(tokens, { provider, appleUserId: apple?.appleUserId });
       }
       try {
         await claimGuestRuns();
@@ -53,7 +63,7 @@ export function LoginScreen() {
       router.replace('/main');
     } catch (error) {
       console.error('로그인 실패', error);
-      setFailure(errorMessage(error, 'Google 로그인에 실패했어요. 다시 시도해 주세요.'));
+      setFailure(errorMessage(error, '로그인에 실패했어요. 다시 시도해 주세요.'));
     } finally {
       signingIn.current = false;
       setBusy(false);
@@ -76,7 +86,7 @@ export function LoginScreen() {
             <Text style={styles.eyebrow}>YOUR PACE, YOUR WAY</Text>
             <Text style={styles.title}>나만의 페이스로,{'\n'}함께 달려요.</Text>
             <Text style={styles.description}>
-              Google 계정으로 로그인하고 러닝 기록을 이어가세요.
+              소셜 계정으로 로그인하고 러닝 기록을 이어가세요.
             </Text>
           </View>
 
@@ -95,6 +105,8 @@ export function LoginScreen() {
                   styles.google,
                   pressed && styles.pressed,
                 ]}>
+                {Platform.OS === 'ios' && !session ? <AppleLoginButton disabled={busy}
+                  onPress={() => { void signIn(undefined, 'apple'); }} onError={appleError} /> : null}
                 <Text
                   style={[
                     styles.providerText,
@@ -107,7 +119,7 @@ export function LoginScreen() {
             <Text
               accessibilityLiveRegion="polite"
               style={styles.statusMessage}>
-              Google 로그인은 iOS 앱과 웹에서 지원해요.{'\n'}Android·카카오·Apple 로그인은 준비 중이에요.
+              Google은 iOS·웹, Apple은 iOS에서 지원해요.{'\n'}다른 소셜 계정은 별개의 PACE 계정으로 가입돼요.
             </Text>
           </View>
 

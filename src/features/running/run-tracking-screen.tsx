@@ -15,6 +15,7 @@ import {
 } from '@/data/active-run-store';
 import { saveCompletedRun } from '@/data/completed-runs-repository';
 import { getSessionState } from '@/features/auth/session-store';
+import { exportHealthRun } from '@/features/health/health-service';
 import { formatDuration, formatKm, formatPace } from '@/lib/format';
 
 import {
@@ -136,6 +137,11 @@ export function RunTrackingScreen() {
       await clearActiveRun();
       setConfirmingFinish(false);
       setMessage(saved.message);
+      try { await exportHealthRun(toCompletedRun(completed)); }
+      catch (error) {
+        console.error('건강 앱 러닝 저장 실패', error);
+        setErrorMessage('PACE 러닝 저장은 완료했지만 건강 앱에는 저장하지 못했어요. 권한을 확인한 뒤 러닝 상세에서 다시 시도해 주세요.');
+      }
     } catch (error) {
       console.error('Unable to finish and save GPS run.', error);
       setErrorMessage('러닝을 저장하지 못했어요. 기록을 유지한 채 다시 시도해 주세요.');

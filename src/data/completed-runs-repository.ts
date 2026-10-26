@@ -33,7 +33,7 @@ const newest = (a: CompletedRun, b: CompletedRun) => b.startedAt - a.startedAt;
 
 export function toCompletedRun(response: RunResponse): CompletedRun {
   return {
-    id: response.id, serverId: response.id, startedAt: Date.parse(response.startedAt),
+    id: response.id, serverId: response.id, clientRunId: response.clientRunId, startedAt: Date.parse(response.startedAt),
     endedAt: Date.parse(response.endedAt), distanceMeters: response.distanceMeters,
     durationSeconds: response.durationSeconds, averagePaceSecondsPerKm: response.averagePaceSecondsPerKm,
     routePoints: (response.route?.points ?? []).map((point) => ({

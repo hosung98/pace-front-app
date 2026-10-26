@@ -2,12 +2,13 @@
   "expo": {
     "name": "PACE",
     "slug": "pace-front-app",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./public/pwa-512.png",
     "scheme": "pacefrontapp",
     "userInterfaceStyle": "dark",
     "ios": {
+      "usesAppleSignIn": true,
       "bundleIdentifier": "com.hocompany.pace",
       "icon": "./public/pwa-512.png",
       "infoPlist": {
@@ -76,7 +77,16 @@
           "iosUrlScheme": "com.googleusercontent.apps.569856299617-2ulippt30k87ubgkq1sotovovlfvsst7"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-apple-authentication",
+      ["expo-local-authentication", {
+        "faceIDPermission": "PACE의 계정과 러닝 기록을 보호하기 위해 Face ID로 앱 잠금을 해제합니다."
+      }],
+      ["@kingstinct/react-native-healthkit", {
+        "background": false,
+        "NSHealthShareUsageDescription": "오늘 걸음 수와 최근 운동을 PACE에서 확인하기 위해 건강 데이터를 읽습니다. 원본은 서버에 전송하지 않습니다.",
+        "NSHealthUpdateUsageDescription": "사용자가 선택한 PACE 러닝 기록을 Apple 건강 앱에 저장합니다."
+      }]
     ],
     "experiments": {
       "baseUrl": "/dev",

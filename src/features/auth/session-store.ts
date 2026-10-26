@@ -12,7 +12,7 @@ export type AuthTokens = {
   user: SessionUser;
   isNewUser: boolean;
 };
-type Session = AuthTokens & { expiresAt: number };
+type Session = AuthTokens & { expiresAt: number; provider?: 'google' | 'apple'; appleUserId?: string };
 type State = { ready: boolean; session: Session | null; error: string | null };
 let state: State = { ready: false, session: null, error: null };
 const listeners = new Set<() => void>();
@@ -65,9 +65,9 @@ export const subscribeSession = (listener: () => void) => {
 };
 export const useSession = () => useSyncExternalStore(subscribeSession, getSessionState, getSessionState);
 
-export async function acceptSession(tokens: AuthTokens): Promise<void> {
+export async function acceptSession(tokens: AuthTokens, identity?: { provider: 'google' | 'apple'; appleUserId?: string }): Promise<void> {
   validate(tokens);
-  const session = { ...tokens, expiresAt: Date.now() + tokens.accessTokenExpiresIn * 1000 };
+  const session = { ...tokens, ...identity, expiresAt: Date.now() + tokens.accessTokenExpiresIn * 1000 };
   const expected = ++revision;
   try {
     await persist(() => writeSession(JSON.stringify(session)));
@@ -119,7 +119,7 @@ export async function accessToken(force = false): Promise<string> {
       receivedTokens = true;
       validate(tokens);
       if (revision !== expectedRevision) throw new Error('로그인 상태가 변경됐어요. 다시 시도해 주세요.');
-      await acceptSession(tokens);
+      await acceptSession(tokens, current.provider ? { provider: current.provider, appleUserId: current.appleUserId } : undefined);
       const session = state.session;
       if (!session) throw new Error('로그인이 종료됐어요.');
       return session;

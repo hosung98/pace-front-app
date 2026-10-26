@@ -11,6 +11,7 @@ type OnboardingFooterProps = {
   wide: boolean;
   onSelectPage: (page: number) => void;
   onAdvance: () => void;
+  busy?: boolean;
 };
 
 export function OnboardingFooter({
@@ -19,6 +20,7 @@ export function OnboardingFooter({
   wide,
   onSelectPage,
   onAdvance,
+  busy = false,
 }: OnboardingFooterProps) {
   return (
     <View style={[styles.footer, wide && styles.wideFooter]}>
@@ -33,6 +35,7 @@ export function OnboardingFooter({
               accessibilityRole="tab"
               accessibilityLabel={`${index + 1}번째 온보딩: ${slide.label}`}
               accessibilityState={{ selected: index === page }}
+              disabled={busy}
               onPress={() => onSelectPage(index)}
               style={styles.dotTarget}>
               <View
@@ -52,6 +55,8 @@ export function OnboardingFooter({
             isLastSlide ? '로그인 화면으로 이동' : '다음 온보딩'
           }
           onPress={onAdvance}
+          disabled={busy}
+          accessibilityState={{ disabled: busy, busy }}
           style={({ pressed }) => [
             styles.nextButton,
             isLastSlide && styles.replayButton,
@@ -62,7 +67,7 @@ export function OnboardingFooter({
               styles.nextText,
               isLastSlide && styles.replayText,
             ]}>
-            {isLastSlide ? '로그인하고 시작하기' : '다음'}
+            {busy ? '시작 정보 저장 중…' : isLastSlide ? '로그인하고 시작하기' : '다음'}
           </Text>
           <Text
             style={[

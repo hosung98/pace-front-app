@@ -113,6 +113,46 @@ test('동시 요청은 만료 토큰을 한 번만 회전하고 새 토큰을 �
   assert.equal(h.session.getSessionState().session.refreshToken, 'alice-refresh-new');
 });
 
+test('Apple 세션의 제공자와 기기 연결 ID는 토큰 회전 후에도 유지한다', async () => {
+  const h = await harness();
+  await h.session.acceptSession(tokens('apple-user', 'old', 1), {
+    provider: 'apple', appleUserId: 'apple-opaque-id',
+  });
+  h.fetch = async () => json(tokens('apple-user', 'rotated'));
+  await h.session.accessToken();
+  assert.equal(h.session.getSessionState().session.provider, 'apple');
+  assert.equal(h.session.getSessionState().session.appleUserId, 'apple-opaque-id');
+});
+
+test('Apple 탈퇴는 새 인증 코드·원본 nonce를 보내고 성공 뒤에만 세션을 지운다', async () => {
+  const h = await harness();
+  await h.session.acceptSession(tokens('apple-user'));
+  h.fetch = async (url, options) => {
+    assert.ok(url.endsWith('/users/me'));
+    assert.equal(options.method, 'DELETE');
+    assert.deepEqual(JSON.parse(options.body), {
+      appleAuthorizationCode: 'fresh-code', appleNonce: 'raw-nonce-1234567890',
+    });
+    return new Response(null, { status: 202 });
+  };
+  await h.load('data/account-repository').deleteAccount({
+    appleAuthorizationCode: 'fresh-code', appleNonce: 'raw-nonce-1234567890',
+  });
+  assert.equal(h.session.getSessionState().session, null);
+});
+
+test('Apple 토큰 폐기 실패 시 탈퇴 성공으로 처리하지 않고 기존 계정·로컬 기록을 유지한다', async () => {
+  const h = await harness();
+  await h.session.acceptSession(tokens('apple-user'));
+  h.memory.set(h.keys.runSync, JSON.stringify({ accounts: { 'user:apple-user': [{ run }] }, guestOwners: {} }));
+  h.fetch = async () => json({ code: 'APPLE_REVOCATION_FAILED', message: 'Apple 연결 해제에 실패했어요.' }, 502);
+  await assert.rejects(h.load('data/account-repository').deleteAccount({
+    appleAuthorizationCode: 'fresh-code', appleNonce: 'raw-nonce-1234567890',
+  }), /Apple 연결 해제/);
+  assert.equal(h.session.getSessionState().session.user.id, 'apple-user');
+  assert.equal(JSON.parse(h.memory.get(h.keys.runSync)).accounts['user:apple-user'].length, 1);
+});
+
 test('동시 401 응답은 한 번만 재인증하고 같은 요청을 한 번 재시도한다', async () => {
   const h = await harness();
   await h.session.acceptSession(tokens());

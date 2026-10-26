@@ -34,8 +34,8 @@ export async function logout(): Promise<void> {
   await clearSession();
 }
 
-export async function deleteAccount(): Promise<void> {
-  await api<void>('/users/me', { method: 'DELETE' });
+export async function deleteAccount(apple?: { appleAuthorizationCode: string; appleNonce: string }): Promise<void> {
+  await api<void>('/users/me', { method: 'DELETE', ...(apple ? { body: JSON.stringify(apple) } : {}) });
   let cleanupError: string | null = null;
   try {
     await removeAccountRunCache();

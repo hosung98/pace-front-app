@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Animated,
   Platform,
@@ -11,6 +11,8 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PaceColors as C } from '@/constants/pace';
+import { completeOnboarding } from '@/data/onboarding-repository';
+import { PaceErrorDialog } from '@/components/pace-feedback';
 
 import { onboardingSlides } from './onboarding-content';
 import { OnboardingFooter } from './onboarding-footer';
@@ -20,6 +22,9 @@ import { useOnboardingPager } from './use-onboarding-pager';
 
 export function OnboardingScreen() {
   const router = useRouter();
+  const saving = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
   const { width, height } = useWindowDimensions();
   const [contentHeight, setContentHeight] = useState(height - 240);
   const [copyHeight, setCopyHeight] = useState(230);
@@ -48,9 +53,18 @@ export function OnboardingScreen() {
   const needsScroll = !isWideLayout && availableArtHeight < 72;
   const slide = onboardingSlides[page];
 
-  const handleAdvance = () => {
+  const handleAdvance = async () => {
+    if (saving.current) return;
     if (isLastSlide) {
-      router.push('/login');
+      saving.current = true;
+      setBusy(true);
+      try {
+        await completeOnboarding();
+        router.replace('/login');
+      } catch (error) {
+        console.error('온보딩 완료 저장 실패', error);
+        setFailure('시작 정보를 저장하지 못했어요. 다시 시도해 주세요.');
+      } finally { saving.current = false; setBusy(false); }
       return;
     }
 
@@ -119,13 +133,15 @@ export function OnboardingScreen() {
         </View>
 
         <OnboardingFooter
+          busy={busy}
           page={page}
           isLastSlide={isLastSlide}
           wide={isWideLayout}
           onSelectPage={setPage}
-          onAdvance={handleAdvance}
+          onAdvance={() => { void handleAdvance(); }}
         />
       </View>
+      <PaceErrorDialog message={failure} onClose={() => setFailure(null)} />
     </SafeAreaView>
   );
 }

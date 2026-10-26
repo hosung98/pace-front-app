@@ -24,6 +24,7 @@ export type ActiveRun = {
 /** A finished run. Mirrors the `POST /runs` payload in docs/API_REQUIREMENTS.md. */
 export type CompletedRun = {
   serverId?: string;
+  clientRunId?: string;
   id: string;
   startedAt: number;
   endedAt: number;

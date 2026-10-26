@@ -25,7 +25,7 @@ async function loadProfile() {
 
 const menuItems = [
   { label: '앱 설정', detail: '알림, 거리 단위, 개인정보', route: '/settings' },
-  { label: '계정 로그인', detail: 'Google 로그인 · iOS·웹 지원', route: '/login' },
+  { label: '계정 로그인', detail: 'Google · Apple 로그인', route: '/login' },
 ] as const;
 
 export function ProfileScreen() {
@@ -80,10 +80,10 @@ function AccountProfile() {
         <View style={styles.profileIcon}><PaceMark size={27} /></View>
         <View style={styles.profileInfo}>
           <Text style={styles.name}>{me?.nickname ?? session?.user.nickname ?? 'PACE 러너'}</Text>
-          <Text style={styles.handle}>{me?.handle ? `@${me.handle}` : session ? 'Google 계정 연결됨' : '로그인하지 않은 기기 사용자'}</Text>
+          <Text style={styles.handle}>{me?.handle ? `@${me.handle}` : session ? '소셜 계정 연결됨' : '로그인하지 않은 기기 사용자'}</Text>
         </View>
         <View style={styles.previewTag}>
-          <Text style={styles.previewTagText}>{session ? 'Google' : '기기'}</Text>
+          <Text style={styles.previewTagText}>{session ? (me?.linkedProviders?.map((p) => p === 'APPLE' || p === 'apple' ? 'Apple' : p === 'GOOGLE' || p === 'google' ? 'Google' : p).join(' · ') || '계정') : '기기'}</Text>
         </View>
         </View>
         {me?.bio ? <Text style={styles.bio}>{me.bio}</Text> : null}
@@ -132,7 +132,7 @@ function AccountProfile() {
         disabled={busy}
         onPress={() => { if (session) setConfirmLogout(true); else router.push('/login'); }}
         style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]}>
-        <Text style={styles.logoutText}>{busy ? '처리 중…' : session ? '로그아웃' : 'Google 로그인'}</Text>
+        <Text style={styles.logoutText}>{busy ? '처리 중…' : session ? '로그아웃' : '소셜 로그인'}</Text>
       </Pressable>
       </>
       )}

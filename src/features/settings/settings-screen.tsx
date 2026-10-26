@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackHeader } from '@/components/back-header';
@@ -7,12 +7,14 @@ import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { PaceQueryState } from '@/components/pace-feedback';
 import { PaceConfirmDialog } from '@/components/pace-confirm-dialog';
-import { deleteAccount as deleteServerAccount, getSettings, patchSettings, type SettingsPatch } from '@/data/account-repository';
+import { deleteAccount as deleteServerAccount, getMe, getSettings, patchSettings, type SettingsPatch } from '@/data/account-repository';
 import { readActiveRun } from '@/data/active-run-store';
 import { getSessionState, useSession } from '@/features/auth/session-store';
 import { useFocusQuery } from '@/hooks/use-focus-query';
 import { errorMessage as describeError } from '@/lib/api-transport';
 import { useRouter } from 'expo-router';
+import { isAppLockEnabled, setAppLockEnabled, supportsAppLock } from '@/features/auth/app-lock';
+import { appleCredential } from '@/features/auth/apple-login';
 
 async function loadSettings() {
   return getSessionState().session ? getSettings() : null;
@@ -31,6 +33,11 @@ function AccountSettings() {
   );
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const userId = session?.user.id;
+  const loadLock = useCallback(async () => userId ? isAppLockEnabled(userId) : false, [userId]);
+  const lock = useFocusQuery(loadLock,
+    false, '앱 잠금 설정을 확인하지 못했어요.');
+  const [lockBusy, setLockBusy] = useState(false);
   const runReminders = settings?.notifications.runReminder ?? true;
   const weeklySummary = settings?.notifications.weeklySummary ?? true;
   const privateProfile = settings?.profileVisibility === 'private';
@@ -49,7 +56,14 @@ function AccountSettings() {
     setBusy(true);
     try {
       if (await readActiveRun()) throw new Error('러닝을 종료하고 저장한 뒤 탈퇴해 주세요.');
-      await deleteServerAccount();
+      const me = await getMe();
+      if (me.linkedProviders.some((provider) => provider.toLowerCase() === 'apple')) {
+        if (Platform.OS !== 'ios') throw new Error('Apple로 가입한 계정은 iPhone에서 재인증 후 탈퇴해 주세요.');
+        const credential = await appleCredential();
+        if (!credential) { setMessage('Apple 재인증을 취소했어요. 계정은 삭제하지 않았어요.'); return; }
+        if (!credential.authorizationCode) throw new Error('Apple 연결 해제에 필요한 인증 코드를 받지 못했어요. 다시 시도해 주세요.');
+        await deleteServerAccount({ appleAuthorizationCode: credential.authorizationCode, appleNonce: credential.nonce });
+      } else { await deleteServerAccount(); }
       router.replace('/login');
     } catch (error) { setMessage(describeError(error, '계정을 삭제하지 못했어요.')); }
     finally { setBusy(false); }
@@ -66,6 +80,32 @@ function AccountSettings() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={styles.sectionTitle}>보안 · 건강 연동</Text>
+        <View style={styles.card}>
+          <SettingSwitch title="Face ID · 기기 암호로 앱 잠금"
+            detail={supportsAppLock ? '기존 로그인 보호용이에요. 세션 만료 시 소셜 로그인이 필요해요.' : 'iPhone에서 사용할 수 있어요.'}
+            value={lock.data} disabled={!session || !supportsAppLock || lockBusy || lock.isLoading || Boolean(lock.errorMessage)}
+            onValueChange={(value) => {
+              if (!session || lockBusy) return;
+              setLockBusy(true);
+              void setAppLockEnabled(session.user.id, value).then(() => lock.reload()).catch((error: unknown) => {
+                console.error('앱 잠금 변경 실패', error);
+                setMessage(describeError(error, '앱 잠금을 변경하지 못했어요.'));
+              }).finally(() => setLockBusy(false));
+            }} />
+          {lock.errorMessage ? <PaceQueryState loading={false} message={lock.errorMessage}
+            onRetry={() => { void lock.reload(); }} /> : null}
+          <View style={styles.divider} />
+          <Pressable accessibilityRole="button" onPress={() => router.push('/health')}
+            style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}>
+            <View style={styles.actionCopy}>
+              <Text style={styles.settingTitle}>Apple 건강</Text>
+              <Text style={styles.settingDetail}>걸음 수·운동 조회와 PACE 러닝 저장 · iPhone 전용</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+        </View>
+        {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}
         {session && (isLoading || errorMessage) ? (
           <PaceQueryState loading={isLoading} message={errorMessage} onRetry={() => { void reload(); }} />
         ) : (
@@ -140,13 +180,12 @@ function AccountSettings() {
             <Text style={styles.chevron}>›</Text>
           </Pressable>
         </View>
-        {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}
         <Text style={styles.note}>{session ? '변경한 설정은 계정에 저장됩니다.' : '로그인 후 계정 설정과 탈퇴 기능을 사용할 수 있어요.'}</Text>
         </>
         )}
       </ScrollView>
       <PaceConfirmDialog visible={confirmDelete} title="계정을 삭제할까요?"
-        message="계정과 서버에 저장된 러닝·GPS 경로가 영구 삭제됩니다. 이 작업은 되돌릴 수 없어요."
+        message="계정과 서버에 저장된 러닝·GPS 경로가 영구 삭제됩니다. 이미 Apple 건강에 저장된 운동은 별도로 남으며 건강 앱에서 직접 삭제해야 해요. 이 작업은 되돌릴 수 없어요."
         onCancel={() => setConfirmDelete(false)} onConfirm={() => { void deleteAccount(); }} />
     </SafeAreaView>
   );

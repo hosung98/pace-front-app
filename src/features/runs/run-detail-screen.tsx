@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackHeader } from '@/components/back-header';
@@ -20,6 +20,8 @@ import { toRouteCoordinates } from './route-geometry';
 import { RunRouteMap } from './run-route-map';
 import { errorMessage } from '@/lib/api-transport';
 import { useSession } from '@/features/auth/session-store';
+import { PaceButton } from '@/components/pace-button';
+import { exportHealthRun, supportsHealth } from '@/features/health/health-service';
 
 const MAP_HEIGHT = 240;
 
@@ -33,6 +35,9 @@ export function RunDetailScreen() {
 }
 
 function AccountRunDetail() {
+  const router = useRouter();
+  const [exporting, setExporting] = useState(false);
+  const [healthMessage, setHealthMessage] = useState<string | null>(null);
   const { runId } = useLocalSearchParams<{ runId?: string }>();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const { session } = useSession();
@@ -119,6 +124,21 @@ function AccountRunDetail() {
         <Text style={styles.note}>
           {session ? '계정에 저장된 러닝과 GPS 경로입니다.' : '기기에 저장된 GPS 기록입니다.'}
         </Text>
+        {supportsHealth ? <>
+          <PaceButton label="Apple 건강에 저장 · 다시 시도" loading={exporting} variant="secondary"
+            onPress={() => {
+              setExporting(true);
+              void exportHealthRun(run).then((saved) => {
+                setHealthMessage(saved ? '건강 앱에 저장했어요. 같은 러닝은 중복 저장하지 않아요.' : '앱 설정에서 Apple 건강 연동을 먼저 켜 주세요.');
+              }).catch((error: unknown) => {
+                console.error('건강 앱 저장 재시도 실패', error);
+                setHealthMessage(errorMessage(error, '건강 앱에 저장하지 못했어요.'));
+              }).finally(() => setExporting(false));
+            }} />
+          <PaceButton label="Apple 건강 연동 설정" variant="secondary" onPress={() => router.push('/health')} />
+          <Text style={styles.note}>건강 앱에는 일시 정지를 포함한 시작~종료 시간으로 저장돼요. GPS 경로는 보내지 않아요.</Text>
+        </> : null}
+        {healthMessage ? <Text accessibilityLiveRegion="polite" style={styles.note}>{healthMessage}</Text> : null}
       </ScrollView>
     </SafeAreaView>
   );

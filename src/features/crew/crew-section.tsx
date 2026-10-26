@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
   rankingHeader: { marginTop: 26, marginBottom: 10, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   sectionTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
   sectionCaption: { color: C.subtle, fontSize: 10 },
-  rankingCard: { paddingVertical: 6, paddingHorizontal: 0 },
+  rankingCard: { paddingVertical: 6, paddingHorizontal: 0, overflow: 'hidden' },
   rankRow: { minHeight: 64, paddingHorizontal: 17, flexDirection: 'row', alignItems: 'center', gap: 13 },
   rankRowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border },
   rankRowMine: { backgroundColor: '#1C2117' },

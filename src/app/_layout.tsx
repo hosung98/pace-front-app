@@ -8,6 +8,8 @@ import { useEffect, useState } from 'react';
 import { PaceColors } from '@/constants/pace';
 import { initializeSession, useSession } from '@/features/auth/session-store';
 import { PaceErrorDialog } from '@/components/pace-feedback';
+import { AppLockGate } from '@/features/auth/app-lock-gate';
+import { AppleSessionGuard } from '@/features/auth/apple-session-guard';
 
 import '@/features/running/location-tracking';
 
@@ -21,7 +23,7 @@ const theme = {
 };
 
 export default function RootLayout() {
-  const { ready, error } = useSession();
+  const { ready, error, session } = useSession();
   const [dismissedError, setDismissedError] = useState<string | null>(null);
   useEffect(() => { void initializeSession(); }, []);
   const [fontsLoaded, fontError] = useFonts({
@@ -43,7 +45,10 @@ export default function RootLayout() {
           });
         }}>
         <StatusBar style="light" />
-        <Stack screenOptions={{ headerShown: false, contentStyle: styles.root }} />
+        <AppleSessionGuard />
+        <AppLockGate userId={session?.user.id}>
+          <Stack screenOptions={{ headerShown: false, contentStyle: styles.root }} />
+        </AppLockGate>
         <PaceErrorDialog message={dismissedError === error ? null : error} onClose={() => setDismissedError(error)} />
       </View>
     </ThemeProvider>

@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
   requestText: { color: C.text, fontSize: 13 },
   requestCount: { color: C.accent, fontSize: 13, fontWeight: '700' },
   sectionTitle: { marginTop: 26, color: C.text, fontSize: 16, fontWeight: '700' },
-  memberCard: { paddingVertical: 4, paddingHorizontal: 0 },
+  memberCard: { paddingVertical: 4, paddingHorizontal: 0, overflow: 'hidden' },
   memberRow: { minHeight: 62, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 11 },
   memberBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border },
   memberMine: { backgroundColor: '#1C2117' },

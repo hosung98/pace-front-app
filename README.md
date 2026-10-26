@@ -7,14 +7,19 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 PACE is a running journal with a dark, mobile-first interface. This first slice
 contains a branded launch splash, three Korean onboarding pages, GPS running,
 and account-connected home, history, statistics, profile, and settings screens.
-Google login is connected on iOS and web. Crew and race rooms use authenticated backend
+Google login is connected on iOS and web; Apple login is implemented for a new iOS build.
+Crew and race rooms use authenticated backend
 APIs rather than sample data; an empty account can create a crew or race room.
 
 - Next, centered page indicators, and horizontal swipes across the illustration
   and text area navigate the onboarding. Swipe right to go back; there is no back
   button. Skip goes to page three.
-- 온보딩 다음 화면에서 iOS·웹 Google 로그인 또는 기기 모드를 선택합니다.
-  카카오·Apple 로그인과 Android Google 로그인은 아직 연결하지 않았습니다.
+- 온보딩 완료 여부를 기기에 저장하며, 이후 실행에서는 로그인 상태에 따라 홈 또는 로그인으로 이동합니다.
+  기존 로그인 사용자는 온보딩 완료로 이관합니다. 로그아웃·탈퇴로 이 기기의 온보딩 상태를 초기화하지 않습니다.
+  저장·조회 실패 시 오류와 재시도를 제공하며, 완료 CTA는 저장 중 중복 입력을 막습니다.
+- 온보딩 다음 화면에서 iOS·웹 Google 로그인, iOS Apple 로그인 또는 기기 모드를 선택합니다.
+  카카오 로그인과 Android Google 로그인은 아직 연결하지 않았습니다.
+  Google과 Apple은 이메일이 같아도 별개의 PACE 계정이며 자동 병합하지 않습니다.
 - The dashboard at `/main` shows device or account metrics. Starting a run opens native
   GPS tracking with distance, elapsed time, speed, pause/resume, and on-device
   save. Background location requires a development/standalone build and OS
@@ -48,7 +53,7 @@ APIs rather than sample data; an empty account can create a crew or race room.
 - Backend API contracts and open integration decisions are documented in
   [docs/API_REQUIREMENTS.md](./docs/API_REQUIREMENTS.md).
 - Each fresh app launch shows an animated logo, tagline, and orbit splash before
-  onboarding. Reduced motion replaces the animation with a short static splash.
+  checking the persisted onboarding state. Reduced motion replaces the animation with a short static splash.
 - On phones, illustration size adapts to the measured space left after the header,
   copy, controls, and safe areas so onboarding fits without vertical scrolling.
   Scrolling is only enabled when unusually large accessibility text or an extremely
@@ -63,7 +68,8 @@ APIs rather than sample data; an empty account can create a crew or race room.
   | `src/features/<feature>` | Screens and feature UI (home, runs, stats, crew, race, profile, …) |
   | `src/features/running` | Run domain: `types.ts`, pure session logic (`run-session.ts`), aggregates (`run-insights.ts`), GPS background task (`location-tracking.ts`) |
   | `src/data` | API와 기기 기록 저장·동기화를 담당하는 저장소 |
-  | `src/features/auth` | Google 로그인, SecureStore 세션, 토큰 갱신 |
+  | `src/features/auth` | Google·Apple 로그인, SecureStore 세션, 토큰 갱신, iOS 앱 잠금 |
+  | `src/features/health` | 온디바이스 Apple 건강 권한·조회·러닝 저장 및 연동 화면 |
   | `src/hooks` | Shared hooks (`use-focus-query.ts` reloads data on screen focus) |
   | `src/lib` | Pure helpers (`format.ts`, `geo.ts`) |
   | `src/components` | Shared UI (`back-header.tsx`, `pace-brand.tsx`, feedback, swipe-to-delete) |
@@ -76,7 +82,73 @@ APIs rather than sample data; an empty account can create a crew or race room.
   License; the original notice is included in `assets/fonts/OFL.txt`.
 
 Validate changes with `npm run lint`, `npx tsc --noEmit`, and
-`node --test tests/api-integration.test.cjs`.
+`node --test tests/*.test.cjs`.
+
+## 1.0.4: 보안·건강 연동 및 UX
+
+**이 변경은 네이티브 모듈과 entitlement를 추가합니다. 1.0.3(7)에 OTA로 배포하면 안 됩니다.**
+`app.json`의 버전/런타임은 1.0.4이며 새 development/TestFlight 빌드가 필요합니다.
+Expo Go, 웹, TypeScript 검사만으로 Apple 로그인·Face ID·HealthKit의 실제 동작을 검증할 수 없습니다.
+
+### Apple 로그인
+
+- `expo-apple-authentication` 공식 버튼을 iOS에서만 표시합니다.
+  Apple 요청의 `state`를 확인하고, 해시 nonce를 Apple에 전달하며 원본 nonce와 서명된 ID 토큰을
+  `/auth/apple`로 보냅니다. 서버에서 서명·issuer·audience·만료·nonce를 검증해야 합니다.
+- Apple이 최초 로그인에만 제공하는 이름은 선택 정보입니다. 클라이언트 이메일을 신뢰하거나
+  같은 이메일의 Google 계정을 자동 연결하지 않습니다.
+- Apple 연결 해제 이벤트와 앱 복귀 시 credential 상태를 확인하여 해당 Apple 세션을 정리합니다.
+  네트워크 등 상태 조회 실패는 로그로 남기고 유효한 기존 세션을 임의로 삭제하지 않습니다.
+- Apple Developer의 `com.hocompany.pace` App ID에 Sign in with Apple을 활성화하고,
+  아래 백엔드 설정·배포를 완료한 후 실제 계정으로 테스트해야 합니다.
+- Apple 계정 탈퇴는 새 Apple 인증을 받아 `DELETE /users/me`에
+  `{ appleAuthorizationCode, appleNonce }`를 전달합니다. 서버가 코드 교환·subject 대조·Apple 토큰
+  폐기를 완료한 후에만 탈퇴를 진행합니다. 재인증 취소나 Apple 폐기 실패 시 계정을 유지합니다.
+  서버에는 `APPLE_CLIENT_IDS`, `APPLE_CLIENT_ID`(기본 `com.hocompany.pace`),
+  유효한 `APPLE_CLIENT_SECRET`이 필요하며 기존 DB에는
+  백엔드의 `database/apple-auth-schema.sql`을 먼저 적용해야 합니다.
+  Apple client secret은 서버 전용 ES256 JWT로, 만료 전 교체해야 하며 프런트 환경 변수에 넣지 않습니다.
+
+### 앱 잠금
+
+- 설정의 **Face ID · 기기 암호로 앱 잠금**에서 계정별로 켤 수 있습니다.
+  설정 변경 때도 기기 인증을 요구하고, 설정은 SecureStore에 보관합니다.
+- 앱 시작과 비활성화 후 복귀를 보호합니다. 최초 잠금 해제 전에는 보호된 화면을 마운트하지 않고,
+  복귀 시에는 기존 화면 위를 가려 진행 중인 GPS 기록을 중단하지 않습니다.
+  인증창 자체의 앱 상태 변화는 재잠금 루프를 만들지 않습니다.
+- Face ID/Touch ID 실패 시 iOS 기기 암호를 허용합니다. 별도 PACE PIN을 만들거나 저장하지 않습니다.
+  이 기능은 기존 세션 잠금 해제용이며 로그아웃·세션 만료를 소셜 로그인 없이 우회하지 않습니다.
+  취소·오류는 잠금 해제 성공으로 처리하지 않고 재시도 상태를 제공합니다.
+
+### Apple 건강
+
+- iPhone 전용, 명시적 동의 후 연동합니다. 서버 설정 API가 실패해도 로컬 보안·건강 메뉴는 접근할 수 있습니다.
+- 읽기: **오늘 걸음 수**, **최근 30일 운동 최대 20개**. 원본과 조회 결과는 메모리에서만 사용하며
+  PACE 서버 업로드, PACE 러닝 자동 생성, 크루·대결 순위 반영을 하지 않습니다.
+- 쓰기: 연동 후 완료한 PACE 러닝을 건강 앱에 자동 저장합니다. 러닝 상세에서 기존 기록 저장·실패 재시도가 가능합니다.
+  거리와 시작·종료 시각만 운동으로 저장하며 GPS 경로·심박·칼로리를 추정해 쓰지 않습니다.
+- **건강 앱의 운동 시간은 시작~종료(일시 정지 포함)**입니다. 선택한 라이브러리가 pause event 저장을
+  제공하지 않아 PACE의 실제 활동 시간과 다를 수 있으며, 이를 동의·상세 화면에 명시합니다.
+  실제 활동 시간은 운동 metadata에 별도로 보존하고 기존 PACE 시간·페이스는 변경하지 않습니다.
+- 로컬/서버 기록에 동일한 원본 `clientRunId` 기반 HealthKit sync identifier와 version을 사용해
+  중복·중단 후 재시도를 보호합니다. 건강 앱 저장 실패는 이미 저장한 PACE 기록을 되돌리지 않습니다.
+- Apple은 읽기 권한 거부 여부를 앱에 알려주지 않으므로 **데이터 없음/읽기 미허용 가능성**으로 안내합니다.
+  연동 켜짐을 모든 권한 허용으로 표시하지 않고 쓰기 허용 여부는 별도로 검사합니다.
+- 연동 끄기는 이후 조회·저장만 중단합니다. 기존 건강 운동의 삭제는 건강 앱에서 직접 해야 하며,
+  PACE 기록 삭제·탈퇴 시 건강 기록까지 삭제했다고 표시하지 않습니다.
+- 네이티브 HealthKit 연동은 `@kingstinct/react-native-healthkit` + Nitro Modules를 사용합니다.
+  Expo SDK 57용 Apple/생체 인증 모듈과 config plugin이 권한 문구·capability를 생성합니다.
+  HealthKit background delivery는 사용하지 않습니다.
+
+### 검증 및 실제 기기 확인 항목
+
+- 자동 검사: 기존 API·Google 웹 로그인·환경 테스트, 온보딩 저장 실패,
+  Apple nonce/state/취소, 생체 인증 취소·계정별 설정, 건강 동의·권한 거부·중복 키·조회 범위.
+- 웹: 온보딩 완료 후 새로고침 시 재노출 없음, 게스트 보안/건강 메뉴, 미지원 플랫폼 안내,
+  크루 랭킹/멤버 강조 배경이 둥근 카드 밖으로 나오지 않는지 확인합니다.
+- 새 iOS 빌드: Apple 최초/재로그인·취소·연결 해제·탈퇴, Face ID 허용/거부·기기 암호·앱 복귀,
+  GPS 기록 중 잠금·복귀, 건강 읽기/쓰기 개별 허용·거부·중복 재시도를 실제 iPhone에서 확인해야 합니다.
+  native production compilation과 실제 OS 권한창·Apple/HealthKit 성공은 JS export만으로 완료 처리하지 않습니다.
 
 ## 백엔드 연동과 iOS 빌드
 
