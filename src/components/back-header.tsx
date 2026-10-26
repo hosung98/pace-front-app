@@ -6,7 +6,9 @@ import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 
 /** Back button · PACE logo row used at the top of stack (non-tab) screens. */
-export function BackHeader({ backLabel = '이전 화면으로 돌아가기' }: { backLabel?: string }) {
+export function BackHeader({ backLabel = '이전 화면으로 돌아가기', showBrand = true }: Readonly<{
+  backLabel?: string; showBrand?: boolean;
+}>) {
   const router = useRouter();
 
   return (
@@ -18,7 +20,7 @@ export function BackHeader({ backLabel = '이전 화면으로 돌아가기' }: {
         style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
         <Text style={styles.backArrow}>‹</Text>
       </Pressable> : <View style={styles.spacer} />}
-      <PaceBrand />
+      {showBrand ? <PaceBrand /> : null}
       <View style={styles.spacer} />
     </View>
   );

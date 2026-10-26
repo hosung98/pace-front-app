@@ -220,6 +220,7 @@ function loginHarness(overrides = {}) {
     'expo-router': { useRouter: () => ({ push() {}, replace() {} }) },
     'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
     '@/components/back-header': { BackHeader: 'BackHeader' },
+    '@/components/pace-brand': { PaceBrand: 'PaceBrand' },
     '@/components/pace-text': { PaceText: 'Text' },
     '@/constants/pace': { PaceColors: {} },
     '@/components/pace-feedback': { PaceErrorDialog: 'PaceErrorDialog' },
@@ -242,6 +243,27 @@ test('iOS 로그인은 공통 Google 버튼과 별도 Apple 버튼을 렌더링�
   assert.equal(apple.parents.includes(google), false);
   const header = nodes.find(({ node }) => node.type === 'BackHeader');
   assert.equal(header.parents.some((node) => node.type === 'ScrollView'), false);
+  assert.equal(header.node.props.showBrand, false);
+  const brands = nodes.filter(({ node }) => node.type === 'PaceBrand');
+  assert.equal(brands.length, 1);
+  assert.equal(brands[0].node.props.large, true);
+  assert.equal(brands[0].parents.some((node) => node.type === 'ScrollView'), true);
+});
+
+test('로그인에서 헤더 로고를 숨겨도 뒤로가기를 유지하고 다른 화면은 기본 로고를 유지한다', () => {
+  let backs = 0;
+  const h = renderHarness('components/back-header.tsx', {
+    'react-native': { Pressable: 'Pressable', View: 'View', StyleSheet: { create: (s) => s } },
+    'expo-router': { useRouter: () => ({ canGoBack: () => true, back: () => backs++ }) },
+    '@/components/pace-brand': { PaceBrand: 'PaceBrand' },
+    '@/components/pace-text': { PaceText: 'Text' },
+    '@/constants/pace': { PaceColors: {} },
+  });
+  const login = flatten(h.render('BackHeader', { showBrand: false }));
+  assert.equal(login.filter(({ node }) => node.type === 'PaceBrand').length, 0);
+  login.find(({ node }) => node.type === 'Pressable').node.props.onPress();
+  assert.equal(backs, 1);
+  assert.equal(flatten(h.render('BackHeader', {})).filter(({ node }) => node.type === 'PaceBrand').length, 1);
 });
 
 test('Apple 인증 중 Google은 로딩하지 않고 중복 요청을 차단하며 취소·실패 후 해제한다', async () => {

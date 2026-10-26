@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackHeader } from '@/components/back-header';
+import { PaceBrand } from '@/components/pace-brand';
 import { PaceText as Text } from '@/components/pace-text';
 import { PaceColors as C } from '@/constants/pace';
 import { PaceErrorDialog } from '@/components/pace-feedback';
@@ -74,7 +75,7 @@ export function LoginScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
-        <BackHeader />
+        <BackHeader showBrand={false} />
       </View>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -82,12 +83,27 @@ export function LoginScreen() {
         showsVerticalScrollIndicator={false}>
         <View style={styles.container}>
           <View style={styles.intro}>
-            <Text style={styles.title}>나만의 페이스로,{'\n'}함께 달려요.</Text>
+            <View style={styles.brandStage}>
+              <View pointerEvents="none" accessible={false} style={styles.trackArt}>
+                <View style={styles.outerTrack} />
+                <View style={styles.innerTrack} />
+                <View style={styles.trackAccent} />
+              </View>
+              <PaceBrand large />
+            </View>
+            <Text style={styles.eyebrow}>YOUR PACE, YOUR RUN.</Text>
+            <Text style={styles.title}>시작은 가볍게,{'\n'}페이스는 나답게.</Text>
             <Text style={styles.description}>
-              로그인하고 러닝 기록을 이어가세요.
+              오늘의 러닝을 기록하고{'\n'}함께 달리는 즐거움을 만나보세요.
             </Text>
           </View>
 
+          <View style={styles.signInSection}>
+          <View style={styles.sectionHeading}>
+            <View style={styles.rule} />
+            <Text style={styles.sectionLabel}>간편하게 시작하기</Text>
+            <View style={styles.rule} />
+          </View>
           <View style={styles.loginOptions}>
             {Platform.OS === 'web' && !session ? (
               <GoogleWebButton disabled={busy} onCredential={(idToken) => { void signIn(idToken); }} />
@@ -109,7 +125,9 @@ export function LoginScreen() {
             ]}>
             <Text style={styles.previewButtonText}>{session ? '메인 화면으로' : '로그인 없이 시작하기'}</Text>
           </Pressable>
+          </View>
 
+          <View style={styles.footer}>
           <Text style={styles.legalNotice}>
             로그인 시 기기 러닝·GPS 경로가 해당 계정에 동기화돼요.{'\n'}Google과 Apple 계정은 각각 별도로 관리돼요.
           </Text>
@@ -120,13 +138,17 @@ export function LoginScreen() {
             <Pressable accessibilityRole="link" onPress={() => router.push('/terms')} style={styles.legalLink}>
               <Text style={styles.legalLinkText}>이용약관</Text>
             </Pressable>
+          </View>
+          <View style={styles.supportLinks}>
             <Pressable accessibilityRole="link" onPress={() => router.push('/support')} style={styles.legalLink}>
-              <Text style={styles.legalLinkText}>도움말 · 문의</Text>
+              <Text style={styles.versionLink}>도움말 · 문의</Text>
+            </Pressable>
+            <Text accessible={false} style={styles.linkDot}>·</Text>
+            <Pressable accessibilityRole="link" onPress={() => router.push('/app-update')} style={styles.legalLink}>
+              <Text style={styles.versionLink}>앱 정보 · 업데이트</Text>
             </Pressable>
           </View>
-          <Pressable accessibilityRole="link" onPress={() => router.push('/app-update')} style={styles.legalLink}>
-            <Text style={styles.versionLink}>앱 정보 · 업데이트</Text>
-          </Pressable>
+          </View>
         </View>
       </ScrollView>
       <PaceErrorDialog message={failure} onClose={() => {
@@ -150,21 +172,31 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 480,
     alignSelf: 'center',
-    paddingHorizontal: 28,
-    paddingBottom: 28,
+    paddingHorizontal: 24,
+    paddingBottom: 16,
   },
-  header: { width: '100%', maxWidth: 480, alignSelf: 'center', paddingHorizontal: 28 },
+  header: { width: '100%', maxWidth: 480, alignSelf: 'center', paddingHorizontal: 24 },
   intro: {
     alignItems: 'center',
-    paddingTop: 32,
+    paddingTop: 4,
     paddingBottom: 32,
   },
+  brandStage: { width: '100%', height: 152, alignItems: 'center', justifyContent: 'center' },
+  trackArt: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  outerTrack: { position: 'absolute', width: 270, height: 132, borderRadius: 70, borderWidth: 1,
+    borderColor: '#23291C', transform: [{ rotate: '-18deg' }] },
+  innerTrack: { position: 'absolute', width: 234, height: 96, borderRadius: 52, borderWidth: 1,
+    borderColor: '#1C2118', transform: [{ rotate: '-18deg' }] },
+  trackAccent: { position: 'absolute', width: 28, height: 3, borderRadius: 2, backgroundColor: C.accent,
+    top: 22, right: 44, transform: [{ rotate: '-18deg' }] },
+  eyebrow: { marginTop: 8, color: C.accent, fontSize: 10, fontWeight: '600', letterSpacing: 2 },
   title: {
-    marginTop: 16,
+    marginTop: 18,
     color: C.text,
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '700',
-    lineHeight: 39,
+    lineHeight: 41,
     letterSpacing: -1.2,
     textAlign: 'center',
   },
@@ -178,13 +210,20 @@ const styles = StyleSheet.create({
   loginOptions: {
     gap: 4,
   },
+  signInSection: { width: '100%' },
+  sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: C.border },
+  sectionLabel: { color: C.muted, fontSize: 11 },
+  footer: { marginTop: 24, alignItems: 'center' },
+  supportLinks: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', columnGap: 8 },
+  linkDot: { color: C.subtle, fontSize: 11 },
   versionLink: { color: C.subtle, fontSize: 11, textAlign: 'center' },
   legalLinks: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 8 },
   legalLink: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   legalLinkText: { color: C.muted, fontSize: 11 },
   previewButton: {
     minHeight: 48,
-    marginTop: 12,
+    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -196,10 +235,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   legalNotice: {
-    marginTop: 24,
     color: C.subtle,
-    fontSize: 10,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 18,
     textAlign: 'center',
   },
   pressed: {
